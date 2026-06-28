@@ -1,0 +1,8 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="Spalten/Spalten.vcxproj" Id="8712dff4-991f-4532-9e8f-5b8a0bfff10c" />
+  <Project Path="Spalten_Test/Spalten_Test.vcxproj" Id="769d57c2-40c0-4d1b-b104-75ee37348ef3" />
+</Solution>
