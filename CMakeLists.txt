@@ -10,3 +10,5 @@ if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
     enable_testing()
     add_subdirectory(Spalten_Test)
 endif()
+
+set_target_properties(Spalten PROPERTIES LINKER_LANGUAGE CXX)
