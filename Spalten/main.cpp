@@ -6,7 +6,7 @@
 #include <cmath>
 #include <thread>
 
-int main() {
+// int main() {
 
     //Timer time_normal;
     //Timer time_fast;
@@ -42,5 +42,5 @@ int main() {
     //printMatrix(inverse);
 
 
-    return 0;
-}
+//     return 0;
+// }
