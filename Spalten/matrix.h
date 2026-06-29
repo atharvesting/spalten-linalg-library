@@ -1,16 +1,16 @@
 #pragma once
-#include <iostream>
-#include <vector>
-#include <algorithm>
+#include <iostream> // cout, endl
+#include <vector> // vector
+#include <algorithm> // transform
 #include "utils.h"
 #include <cmath>
-#include <iomanip>
-#include <set>
-#include <numeric>
-#include <execution>
-#include <functional>
+#include <iomanip> // set_precision
+#include <set> // set
+#include <numeric> // reduce, transform_reduce
+#include <execution> // par_unseq, par
+#include <functional> // function
 #include <utility>
-#include <thread>
+#include <thread> // jthread
 
 /// @brief A class representing a mathematical vector.
 /// @tparam T The datatype of the vector elements.
@@ -342,6 +342,43 @@ public:
 		return 0;
 	}
 
+	/// @brief Generate an rXc matrix filled with zeros from the appropriate datatype.
+	/// @tparam T The datatype of the matrix elements.
+	/// @param r The number of rows in the matrix.
+	/// @param c The number of columns in the matrix.
+	/// @return A matrix filled with zeros.
+	static Matrix<T> zeros(size_t r, size_t c) {
+		return Matrix<T>(r, c, T{ 0 });
+	}
+
+	/// @brief Generate an nXn matrix filled with zeros from the appropriate datatype.
+	/// @tparam T The datatype of the matrix elements
+	/// @param dim The square dimension of the matrix.
+	/// @return An nXn matrix filled with zeros
+	static Matrix<T> zeros(size_t dim) {
+		return Matrix<T>(dim, dim, T{ 0 });
+	}
+
+	/// @brief Generate an rXc matrix filled with ones from the appropriate datatype.
+	/// @tparam T The datatype of the matrix elements.
+	/// @param r The number of rows in the matrix.
+	/// @param c The number of columns in the matrix.
+	/// @return A matrix filled with ones.
+	static Matrix<T> ones(const size_t& r, const size_t& c) {
+		return Matrix<T>(r, c, T{ 1 });
+	}
+
+	/// @brief Generate an nXn identity matrix.
+	/// @tparam T The datatype of the matrix elements.
+	/// @param dim The dimension of the identity matrix.
+	/// @return An identity matrix of the specified dimension.
+	static Matrix<T> identity(const size_t& dim) {
+		auto id = Matrix<T>::zeros(dim, dim);
+		for (int i = 0; i < dim; i++)
+			id(i, i) = T{ 1 };
+		return id;
+	}
+
 	/// @brief Fill the matrix with zeros.
 	void fill_zeros() {
 		std::fill(rix.begin(), rix.end(), static_cast<T>(0));
@@ -526,47 +563,6 @@ void printMatrix(const Matrix<T>& mat) {
 	}
 }
 
-/// @brief Generate an rXc matrix filled with zeros from the appropriate datatype.
-/// @tparam T The datatype of the matrix elements.
-/// @param r The number of rows in the matrix.
-/// @param c The number of columns in the matrix.
-/// @return A matrix filled with zeros.
-template <typename T>
-Matrix<T> zeros(size_t r, size_t c) {
-	return Matrix<T>(r, c, T{ 0 });
-}
-
-/// @brief Generate an nXn matrix filled with zeros from the appropriate datatype.
-/// @tparam T The datatype of the matrix elements
-/// @param dim The square dimension of the matrix.
-/// @return An nXn matrix filled with zeros
-template <typename T>
-Matrix<T> zeros(size_t dim) {
-	return Matrix<T>(dim, dim, T{ 0 });
-}
-
-/// @brief Generate an rXc matrix filled with ones from the appropriate datatype.
-/// @tparam T The datatype of the matrix elements.
-/// @param r The number of rows in the matrix.
-/// @param c The number of columns in the matrix.
-/// @return A matrix filled with ones.
-template <typename T>
-Matrix<T> ones(size_t r, size_t c) {
-	return Matrix<T>(r, c, T{ 1 });
-}
-
-/// @brief Generate an nXn identity matrix.
-/// @tparam T The datatype of the matrix elements.
-/// @param dim The dimension of the identity matrix.
-/// @return An identity matrix of the specified dimension.
-template <typename T>
-Matrix<T> identity(size_t dim) {
-	Matrix<T> identity = zeros<T>(dim, dim);
-	for (int i = 0; i < dim; i++)
-		identity(i, i) = T{ 1 };
-	return identity;
-}
-
 /// @brief Generate an rXc matrix with random float values between [0, 1).
 /// @param r The number of rows in the matrix.
 /// @param c The number of columns in the matrix.
@@ -619,6 +615,131 @@ Matrix<T> transpose(Matrix<T>& mat) {
 		}
 	}
 	return result;
+}
+
+/// @brief Struct that holds the L and U matrices resulting from LU decomposition of a square matrix.
+struct LU {
+	Matrix<float> L;
+	Matrix<float> U;
+
+	template <typename T>
+	LU(Matrix<T> og, size_t dim) : L(Matrix<float>::identity(dim)), U(og) {
+		if (og.rows != dim || og.cols != dim)
+			throw std::invalid_argument("Mismatch between specified square dimension and input matrix dimensions.");
+	}
+
+	void print() {
+		std::cout << "L ";
+		printMatrix(L);
+		std::cout << "U ";
+		printMatrix(U);
+	}
+};
+
+/// @brief Perform LU decomposition on a square matrix.
+/// @tparam T The datatype of the matrix elements.
+/// @param mat The square matrix to decompose.
+/// @return The LU decomposition structure.
+template <typename T>
+LU LU_decomp(const Matrix<T>& mat) {
+	if (mat.is_square() == 0)
+		throw std::invalid_argument("Matrix must be a square matrix.");
+
+	LU lu(mat, mat.rows);
+
+	// For each pivot element in U
+	for (size_t p = 0; p < mat.cols - 1; p++)
+	{
+		float pivot = lu.U(p, p);
+		if (pivot == 0.0f)
+			throw std::runtime_error("Zero pivot error.");
+
+		// For each row in U under Pivot
+		for (size_t r = p + 1; r < mat.rows; r++)
+		{
+			float multiplier = lu.U(r, p) / pivot;
+			lu.L(r, p) = multiplier;
+
+			// For each element in row
+			for (size_t c = p; c < mat.cols; c++)
+			{
+				lu.U(r, c) -= multiplier * lu.U(p, c);
+			}
+		}
+	}
+	return lu;
+}
+
+/// @brief Solve system of equations using forward substitution, given a lower triangular matrix L and a vector b.
+/// @tparam T The datatype of the matrix elements.
+/// @tparam U The datatype of the vector elements.
+/// @param L The lower triangular coefficient matrix.
+/// @param b The vector.
+/// @return The solution vector y.
+template <typename T, typename U>
+Vector<float> fwd_substitution(const Matrix<T>& L, const Vector<U>& b) {
+	if (L.rows != b.dim)
+		throw std::invalid_argument("Matrix and Vector dimensions must be compatible.");
+
+	if (L.is_square() == 0)
+		throw std::invalid_argument("Insufficient data to solve simultaneous equations.");
+
+	Vector<float> y(L.rows);
+
+	for (int i = 0; i < L.rows; i++) {
+		float sum = 0.0f;
+
+		for (int j = 0; j < i; j++) {
+			sum += y(j) * L(i, j);
+		}
+		y(i) = static_cast<float>(b(i) - sum) / static_cast<float>(L(i, i));
+	}
+	return y;
+}
+
+
+/// @brief Calculate the product of all diagonal elements
+/// @tparam T The datatype of the matrix
+/// @param mat The square matrix for which to find the product of diagonals
+/// @return Product of diagonals
+template <typename T>
+T diag_prod(const Matrix<T>& mat) {
+	if (mat.is_square() == 0)
+		throw std::invalid_argument("Matrix must be a square matrix.");
+
+	T product = T{ 1 };
+	for (int i = 0; i < mat.rows; i++) {
+		product *= mat(i, i);
+	}
+	return product;
+}
+
+/// @brief Solve system of equations using backward substitution, given an upper triangular matrix U and a vector y.
+/// @tparam T The datatype of the matrix elements.
+/// @tparam U_type The datatype of the vector elements.
+/// @param U The upper triangular coefficient matrix.
+/// @param y The vector.
+/// @return The solution vector x.
+template <typename T, typename U_type>
+Vector<float> bwd_substitution(const Matrix<T>& U, const Vector<U_type>& y) {
+	if (U.rows != y.dim)
+		throw std::invalid_argument("Matrix and Vector dimensions must be compatible.");
+
+	if (U.is_square() == 0)
+		throw std::invalid_argument("Insufficient data to solve simultaneous equations.");
+
+	Vector<float> x(U.rows);
+
+	for (int row = U.rows - 1; row >= 0; row--) {
+		float sum = 0.0f;
+
+		for (int col = row + 1; col < U.cols; col++) {
+			sum += U(row, col) * x(col);
+		}
+
+		x(row) = static_cast<float>(y(row) - sum) / static_cast<float>(U(row, row));
+	}
+	return x;
 }
 
 /// @brief Find matrix determinant using Laplace expansion by minors. 
@@ -693,7 +814,7 @@ Matrix<T> adj(Matrix<T>& mat) {
 /// @return An std::vector of Vector objects representing the matrix.
 template <typename T>
 std::vector<Vector<T>> mat_to_vecs(const Matrix<T>& mat) {
-	std::vector<T> tmp;
+	std::vector<T> tmp; tmp.reserve(mat.rows);
 	std::vector<Vector<T>> result;
 
 	for (size_t col = 0; col < mat.cols; col++)
@@ -757,7 +878,7 @@ Matrix<float> inv(Matrix<T>& mat) {
 
 	auto y_column_vecs = std::vector<Vector<float>>();
 	y_column_vecs.reserve(mat.rows);
-	auto id_column_vecs = mat_to_vecs(identity<float>(mat.rows));
+	auto id_column_vecs = mat_to_vecs(Matrix<float>::identity(mat.rows));
 
 	for (int i = 0; i < mat.rows; i++)
 		y_column_vecs.push_back(fwd_substitution(lu.L, id_column_vecs[i]));
@@ -858,128 +979,4 @@ Matrix<T> submatrix(const Matrix<T>& mat, std::set<int> exclude_rows, std::set<i
 		}
 	}
 	return result;
-}
-
-/// @brief Struct that holds the L and U matrices resulting from LU decomposition of a square matrix.
-struct LU {
-	Matrix<float> L;
-	Matrix<float> U;
-
-	template <typename T>
-	LU(Matrix<T> og, size_t dim) : L(identity<float>(dim)), U(og) {
-		if (og.rows != dim || og.cols != dim)
-			throw std::invalid_argument("Mismatch between specified square dimension and input matrix dimensions.");
-	}
-
-	void print() {
-		std::cout << "L ";
-		printMatrix(L);
-		std::cout << "U ";
-		printMatrix(U);
-	}
-};
-
-/// @brief Perform LU decomposition on a square matrix.
-/// @tparam T The datatype of the matrix elements.
-/// @param mat The square matrix to decompose.
-/// @return The LU decomposition structure.
-template <typename T>
-LU LU_decomp(const Matrix<T>& mat) {
-	if (mat.is_square() == 0)
-		throw std::invalid_argument("Matrix must be a square matrix.");
-	
-	LU lu(mat, mat.rows);
-
-	// For each pivot element in U
-	for (size_t p = 0; p < mat.cols - 1; p++) 
-	{
-		float pivot = lu.U(p, p);
-		if (pivot == 0.0f)
-			throw std::runtime_error("Zero pivot error.");
-
-		// For each row in U under Pivot
-		for (size_t r = p + 1; r < mat.rows; r++) 
-		{
-			float multiplier = lu.U(r, p) / pivot;
-			lu.L(r, p) = multiplier;
-
-			// For each element in row
-			for (size_t c = p; c < mat.cols; c++) 
-			{
-				lu.U(r, c) -= multiplier * lu.U(p, c);
-			}
-		}
-	}
-	return lu;
-}
-
-/// @brief Solve system of equations using forward substitution, given a lower triangular matrix L and a vector b.
-/// @tparam T The datatype of the matrix elements.
-/// @tparam U The datatype of the vector elements.
-/// @param L The lower triangular coefficient matrix.
-/// @param b The vector.
-/// @return The solution vector y.
-template <typename T, typename U>
-Vector<float> fwd_substitution(const Matrix<T>& L, const Vector<U>& b) {
-	if (L.rows != b.dim)
-		throw std::invalid_argument("Matrix and Vector dimensions must be compatible.");
-
-	if (L.is_square() == 0)
-		throw std::invalid_argument("Insufficient data to solve simultaneous equations.");
-
-	Vector<float> y(L.rows);
-
-	for (int i = 0; i < L.rows; i++) {
-		float sum = 0.0f;
-
-		for (int j = 0; j < i; j++) {
-			sum += y(j) * L(i, j);
-		}
-		y(i) = static_cast<float>(b(i) - sum) / static_cast<float>(L(i, i));
-	}
-	return y;
-}
-
-/// @brief Solve system of equations using backward substitution, given an upper triangular matrix U and a vector y.
-/// @tparam T The datatype of the matrix elements.
-/// @tparam U_type The datatype of the vector elements.
-/// @param U The upper triangular coefficient matrix.
-/// @param y The vector.
-/// @return The solution vector x.
-template <typename T, typename U_type>
-Vector<float> bwd_substitution(const Matrix<T>& U, const Vector<U_type>& y) {
-	if (U.rows != y.dim)
-		throw std::invalid_argument("Matrix and Vector dimensions must be compatible.");
-
-	if (U.is_square() == 0)
-		throw std::invalid_argument("Insufficient data to solve simultaneous equations.");
-
-	Vector<float> x(U.rows);
-
-	for (int row = U.rows - 1; row >= 0; row--) {
-		float sum = 0.0f;
-
-		for (int col = row + 1; col < U.cols; col++) {
-			sum += U(row, col) * x(col);
-		}
-		
-		x(row) = static_cast<float>(y(row) - sum) / static_cast<float>(U(row, row));
-	}
-	return x;
-}
-
-/// @brief Calculate the product of all diagonal elements
-/// @tparam T The datatype of the matrix
-/// @param mat The square matrix for which to find the product of diagonals
-/// @return Product of diagonals
-template <typename T>
-T diag_prod(const Matrix<T>& mat) {
-	if (mat.is_square() == 0)
-		throw std::invalid_argument("Matrix must be a square matrix.");
-
-	T product = T{ 1 };
-	for (int i = 0; i < mat.rows; i++) {
-		product *= mat(i, i);
-	}
-	return product;
 }

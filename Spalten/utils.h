@@ -7,15 +7,23 @@
 
 double generate_random(int low, int high, bool zero2one) {
 	static std::random_device rd;
-	static std::mt19937 gen(rd());
+	static std::mt19937 rng(rd());
 	if (zero2one) {
 		std::uniform_real_distribution<double> distr(0.0, 1.0);
-		return distr(gen);
+		return distr(rng);
 	}
 	else {
 		std::uniform_int_distribution<> distr(low, high);
-		return distr(gen);
+		return distr(rng);
 	}
+}
+
+// https://en.cppreference.com/cpp/numeric/random/normal_distribution
+double generate_random_n(double mean, double variance) {
+	static std::random_device rd;
+	static std::mt19937 rng(rd());
+	std::normal_distribution<double> distr{ mean, variance };
+	return distr(rng);
 }
 
 

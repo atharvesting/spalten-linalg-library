@@ -6,7 +6,23 @@
 #include <cmath>
 #include <thread>
 
-// int main() {
+int main() {
+
+	Timer t, g;
+	for (int i = 5; i < 1200; i += 25) {
+		auto m1 = mat_random_int_range(i, i, 1, 9);
+		auto m2 = mat_random_int_range(i, i, 1, 9);
+		float sum_naive = 0.0f, sum_multi = 0.0f;
+		for (int repeats = 0; repeats < 10; repeats++) {
+			t.reset();
+			auto slow = m1 * m2;
+			sum_naive += t.elapsed();
+			g.reset();
+			//auto fast = fast_mult2(m1, m2);
+			sum_multi += g.elapsed();
+		}
+		std::cout << i << ", " << sum_naive / 10.0f << ", " << sum_multi / 10.0f << std::endl;
+	}
 
     //Timer time_normal;
     //Timer time_fast;
@@ -30,7 +46,7 @@
     //    std::cout << i << ": Normal = " << sum_normal / 10.0 << " ";
     //    std::cout << "Fast = " << sum_fast / 10.0 << "\n";
     //}
-    
+
     //auto m1 = Matrix<int>(3, 3, std::vector<int>{
     //    4, 3, 8,
     //    6, 2, 5,
@@ -42,5 +58,5 @@
     //printMatrix(inverse);
 
 
-//     return 0;
-// }
+    return 0;
+}
