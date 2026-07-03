@@ -482,44 +482,15 @@ public:
 		if (this->cols != other.rows)
 			throw std::invalid_argument("Column count of first and Row count of second must match for matrix multiplication.");
 
-		if (this->rows * this->cols * other.cols < 4096000) {
-			Matrix<T> result(this->rows, other.cols);
-			for (int i = 0; i < this->rows; i++) {
-				for (int j = 0; j < other.cols; j++) {
-					for (int k = 0; k < this->cols; k++) {
-						result(i, j) += (*this)(i, k) * other(k, j);
-					}
+		Matrix<T> result(this->rows, other.cols);
+		for (int i = 0; i < this->rows; i++) {
+			for (int j = 0; j < other.cols; j++) {
+				for (int k = 0; k < this->cols; k++) {
+					result(i, j) += (*this)(i, k) * other(k, j);
 				}
 			}
-			return result;
 		}
-		else {
-			auto thread_count = std::thread::hardware_concurrency();
-			float row_thread_ratio = this->rows / thread_count;
-			int chunks = row_thread_ratio > 4 ? static_cast<int>(row_thread_ratio) : 4;
-			Matrix<T> result(this->rows, other.cols);
-			std::vector<std::jthread> workers;
-
-			for (unsigned int t = 0; t < thread_count; t++){
-				size_t start_row = t * chunks;
-				size_t end_row = std::min(start_row + chunks, this->rows);
-
-				if (start_row < end_row) {
-					workers.emplace_back([&, start_row, end_row]() {
-						for (size_t r = start_row; r < end_row; r++) {
-							for (size_t c = 0; c < other.cols; c++) {
-								T res{};
-								for (size_t k = 0; k < this->cols; k++) {
-									res += (*this)(r, k) * other(k, c);
-								}
-								result(r, c) = res;
-							}
-						}
-						});
-				}
-			}
-			return result;
-		}
+		return result;
 	}
 
 	/// @brief Copy the elements of another matrix into this matrix if their dimensions match.
@@ -547,7 +518,41 @@ public:
 	Matrix<T> operator-() const {
 		return (*this) * -1;
 	}
+
+	template <typename U>
+	Matrix<T> fast_mult(const Matrix<U>& other) const {
+		if (this->cols != other.rows)
+			throw std::invalid_argument("Column count of first and Row count of second must match for matrix multiplication.");
+
+		auto thread_count = std::thread::hardware_concurrency();
+		float row_thread_ratio = this->rows / thread_count;
+		int chunks = row_thread_ratio > 4 ? static_cast<int>(row_thread_ratio) : 4;
+
+		Matrix<T> result(this->rows, other.cols);
+		std::vector<std::jthread> workers;
+
+		for (unsigned int t = 0; t < thread_count; t++) {
+			size_t start_row = t * chunks;
+			size_t end_row = std::min(start_row + chunks, this->rows);
+
+			if (start_row < end_row) {
+				workers.emplace_back([&, start_row, end_row]() {
+					for (size_t r = start_row; r < end_row; r++) {
+						for (size_t c = 0; c < other.cols; c++) {
+							T res{};
+							for (size_t k = 0; k < this->cols; k++) {
+								res += (*this)(r, k) * other(k, c);
+							}
+							result(r, c) = res;
+						}
+					}
+					});
+			}
+		}
+		return result;
+	}
 };
+
 
 /// @brief Unrefinedly print the matrix to the console with 4 decimal places of precision, along with its dimensions.
 /// @tparam T The datatype of the matrix elements.
