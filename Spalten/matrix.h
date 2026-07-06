@@ -572,10 +572,18 @@ void printMatrix(const Matrix<T>& mat) {
 /// @param r The number of rows in the matrix.
 /// @param c The number of columns in the matrix.
 /// @return A matrix filled with random float values.
-Matrix<float> mat_random(size_t r, size_t c) {
+Matrix<float> mat_random_uniform(size_t r, size_t c) {
 	Matrix<float> mat(r, c);
 	for (auto& num : mat.rix) {
 		num = static_cast<float>(generate_random(0, 0, true));
+	}
+	return mat;
+}
+
+Matrix<float> mat_random_normal(size_t r, size_t c, float mean=0, float variance=1) {
+	Matrix<float> mat(r, c);
+	for (auto& num : mat.rix) {
+		num = generate_random_n(mean, variance);
 	}
 	return mat;
 }
