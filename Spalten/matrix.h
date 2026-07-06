@@ -1,16 +1,17 @@
 #pragma once
-#include <iostream> // cout, endl
-#include <vector> // vector
-#include <algorithm> // transform
+#include <iostream>		// cout, endl
+#include <vector>		// vector
+#include <algorithm>	// transform
 #include "utils.h"
-#include <cmath>
-#include <iomanip> // set_precision
-#include <set> // set
-#include <numeric> // reduce, transform_reduce
-#include <execution> // par_unseq, par
-#include <functional> // function
+#include <cmath> 
+#include <iomanip>		// set_precision
+#include <set>			// set
+#include <numeric>		// reduce, transform_reduce
+#include <execution>	// par_unseq, par
+#include <functional>	// function
 #include <utility>
-#include <thread> // jthread
+#include <thread>		// jthread
+#include <type_traits>	// common_type_t
 
 /// @brief A class representing a mathematical vector.
 /// @tparam T The datatype of the vector elements.
@@ -61,7 +62,7 @@ public:
 	/// @brief Check if the dimensions of this vector match those of another vector.
 	/// @param other The other vector to compare dimensions with.
 	/// @return True if the dimensions match, false otherwise.
-	bool dims_match(const Vector& other) const {
+	bool dims_equal(const Vector& other) const {
 		return this->dim == other.dim;
 	}
 
@@ -91,42 +92,62 @@ public:
 	/// @param other The other vector to perform the operation with.
 	/// @param func The function to apply element-wise.
 	/// @return The result of the element-wise operation.
-	Vector<T> element_wise(const Vector& other, std::function<T(T, T)> func) const {
-		if (!dims_match(other)) 
+	template <typename U>
+	auto _element_wise(const Vector<U>& other, auto func) const {
+		if (!dims_equal(other)) 
 			throw std::invalid_argument("Vector dimensions must match.");
-		Vector<T> result(this->dim);
-		std::transform(vec.begin(), vec.end(), other.begin(), result.begin(), func);
+		
+		using ResultType = std::common_type_t<T, U>;
+		Vector<ResultType> result(this->dim);
+		
+		std::transform(std::execution::par_unseq, 
+			vec.begin(), vec.end(), 
+			other.begin(), result.begin(), 
+			func
+		);
 		return result;
 	}
 
 	/// @brief Add another vector to this vector.
 	/// @param other The other vector to add.
 	/// @return The result of the addition.
-	Vector<T> operator+(const Vector& other) const {
-		return element_wise(other, std::plus<T>());
+	template <typename U>
+	auto operator+(const Vector<U>& other) const {
+		return _element_wise(other, std::plus<>());
 	}
 
 	/// @brief Subtract another vector from this vector.
 	/// @param other The other vector to subtract.
 	/// @return The result of the subtraction.
-	Vector<T> operator-(const Vector& other) const {
-		return element_wise(other, std::minus<T>());
+	template <typename U>
+	auto operator-(const Vector& other) const {
+		return _element_wise(other, std::minus<>());
 	}
 
 	/// @brief Calculate the dot product of this vector and another vector.
 	/// @param other The other vector to calculate the dot product with.
 	/// @return The dot product of the two vectors.
-	T operator*(const Vector& other) const {
-		if (!dims_match(other)) 
+	template <typename U>
+	auto operator*(const Vector<U>& other) const {
+		if (!dims_equal(other)) 
 			throw std::invalid_argument("Vector dimensions must match.");
-		return std::transform_reduce(vec.begin(), vec.end(), other.begin(), 0, std::plus<T>(), std::multiplies<T>());
+
+		return std::transform_reduce(
+			std::execution::par_unseq, 
+			vec.begin(), vec.end(), 
+			other.begin(), 0, 
+			std::plus<>(), std::multiplies<>()
+		);
 	}
 
 	/// @brief Multiply this vector by a scalar.
 	/// @param scalar The scalar to multiply by.
 	/// @return The result of the multiplication.
-	Vector<T> operator*(const float& scalar) const {
-		Vector<T> result(this->dim);
+	template <typename U>
+	auto operator*(const U& scalar) const {
+		using ResultType = std::common_type_t<T, U>;
+		Vector<ResultType> result(this->dim);
+
 		std::transform(std::execution::par_unseq,
 			vec.begin(),
 			vec.end(),
@@ -324,6 +345,9 @@ public:
 			throw std::invalid_argument("Inexact amount of numbers provided.");
 	}
 
+	/// @brief Conversion constructor
+	/// @tparam U The datatype of the argument matrix
+	/// @param other The matrix to be converted to desired datatype
 	template <typename U>
 	Matrix(const Matrix<U>& other) : rows(other.rows), cols(other.cols), rix(other.rows * other.cols, T{}) {
 		std::transform(
@@ -381,7 +405,10 @@ public:
 
 	/// @brief Fill the matrix with zeros.
 	void fill_zeros() {
-		std::fill(rix.begin(), rix.end(), static_cast<T>(0));
+		std::fill(std::execution::par_unseq, 
+			rix.begin(), rix.end(), 
+			static_cast<T>(0)
+		);
 	}
 
 	/// @brief Fill the matrix with random integer values based on specified range[start, stop).
@@ -426,7 +453,8 @@ public:
 	/// @brief Check if the dimensions of this matrix are equal to those of another matrix.
 	/// @param other The other matrix to compare with.
 	/// @return True if the dimensions are equal, false otherwise.
-	bool dims_equal(const Matrix<T>& other) const {
+	template <typename U>
+	bool dims_equal(const Matrix<U>& other) const {
 		return this->rows == other.rows && this->cols == other.cols;
 	}
 
@@ -434,43 +462,57 @@ public:
 	/// @param other The other matrix to compare with.
 	/// @return True if the matrices are equal, false otherwise.
 	bool operator==(const Matrix<T>& other) const {
-		if (dims_equal(other)) {
-			for (int i = 0; i < this->rix.size(); i++) {
-				if (this->rix[i] != other.rix[i]) return false;
-			}
-			return true;
+		if (!dims_equal(other))
+			return false;
+
+		for (int i = 0; i < this->rix.size(); i++) {
+			if (this->rix[i] != other.rix[i]) return false;
 		}
-		return false;
+		return true;
+	}
+
+	template <typename U>
+	auto _element_wise(const Matrix<U>& other, auto func) const {
+		if (!dims_equal(other))
+			throw std::invalid_argument("Matrix dimensions must match.");
+
+		// Choosing the datatype with higher precision
+		using ResultType = std::common_type_t<T, U>;
+		Matrix<ResultType> result(this->rows, this->cols);
+
+		std::transform(std::execution::par_unseq,
+			this->rix.begin(), this->rix.end(),
+			other.rix.begin(), result.rix.begin(),
+			func
+		);
+		return result;
 	}
 
 	/// @brief Add another matrix to this matrix.
 	/// @param other The other matrix to add.
 	/// @return A new matrix containing the sum.
-	Matrix<T> operator+(const Matrix<T>& other) const {
-		if (dims_equal(other)) {
-			Matrix<T> result(rows, cols);
-			for (size_t i = 0; i < rix.size(); i++)
-				result.rix[i] = rix[i] + other.rix[i];
-			return result;
-		}
-		else {
+	template <typename U>
+	auto operator+(const Matrix<U>& other) const {
+		if (!dims_equal(other))
 			throw std::invalid_argument("Dimensions of matrices must match for addition.");
-		}
+		return _element_wise(other, std::plus<>());
 	}
 
 	/// @brief Subtract another matrix from this matrix.
 	/// @param other The other matrix to subtract.
 	/// @return A new matrix containing the difference.
-	Matrix<T> operator-(const Matrix<T>& other) const {
-		if (dims_equal(other)) {
-			Matrix<T> result(rows, cols);
-			for (size_t i = 0; i < rix.size(); i++)
-				result.rix[i] = rix[i] - other.rix[i];
-			return result;
-		}
-		else {
+	template <typename U>
+	auto operator-(const Matrix<U>& other) const {
+		if (!dims_equal(other))
 			throw std::invalid_argument("Dimensions of matrices must match for subtraction.");
-		}
+		return _element_wise(other, std::minus<>());
+	}
+
+	template <typename U>
+	auto hadamard(const Matrix<U>& other) const {
+		if (!dims_equal(other))
+			throw std::invalid_argument("Matrix dimensions must match.");
+		return _element_wisea(other, std::multiplies<>());
 	}
 
 	/// @brief Multiply this matrix by another matrix.
@@ -482,15 +524,47 @@ public:
 		if (this->cols != other.rows)
 			throw std::invalid_argument("Column count of first and Row count of second must match for matrix multiplication.");
 
-		Matrix<T> result(this->rows, other.cols);
-		for (int i = 0; i < this->rows; i++) {
-			for (int j = 0; j < other.cols; j++) {
-				for (int k = 0; k < this->cols; k++) {
-					result(i, j) += (*this)(i, k) * other(k, j);
+		if (this->rows * this->cols * other.rows < 4'000'000) 
+		{
+			Matrix<T> result(this->rows, other.cols);
+			for (int i = 0; i < this->rows; i++) {
+				for (int j = 0; j < other.cols; j++) {
+					for (int k = 0; k < this->cols; k++) {
+						result(i, j) += (*this)(i, k) * other(k, j);
+					}
 				}
 			}
+			return result;
 		}
-		return result;
+		else 
+		{
+			auto thread_count = std::thread::hardware_concurrency();
+			float row_thread_ratio = this->rows / thread_count;
+			int chunks = row_thread_ratio > 4 ? static_cast<int>(row_thread_ratio) : 4;
+
+			Matrix<T> result(this->rows, other.cols);
+			std::vector<std::jthread> workers;
+
+			for (unsigned int t = 0; t < thread_count; t++) {
+				size_t start_row = t * chunks;
+				size_t end_row = std::min(start_row + chunks, this->rows);
+
+				if (start_row < end_row) {
+					workers.emplace_back([&, start_row, end_row]() {
+						for (size_t r = start_row; r < end_row; r++) {
+							for (size_t c = 0; c < other.cols; c++) {
+								T res{};
+								for (size_t k = 0; k < this->cols; k++) {
+									res += (*this)(r, k) * other(k, c);
+								}
+								result(r, c) = res;
+							}
+						}
+						});
+				}
+			}
+			return result;
+		}
 	}
 
 	/// @brief Copy the elements of another matrix into this matrix if their dimensions match.
