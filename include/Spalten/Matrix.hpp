@@ -1,309 +1,20 @@
-#pragma once
-#include <iostream>		// cout, endl
-#include <vector>		// vector
-#include <algorithm>	// transform
-#include "utils.h"
-#include <cmath> 
-#include <iomanip>		// set_precision
-#include <set>			// set
-#include <numeric>		// reduce, transform_reduce
-#include <execution>	// par_unseq, par
-#include <functional>	// function
-#include <utility>
-#include <thread>		// jthread
-#include <type_traits>	// common_type_t
+#include <vector>         // vector
+#include <algorithm>      // transform, fill, min
+#include <iostream>       // cout, fixed, endl
+#include <stdexcept>      // invalid_argument, runtime_error
+#include <utility>        // move, pair
+#include <type_traits>    // common_type_t
+#include <execution>      // execution::par_unseq
+#include <thread>         // thread::hardware_concurrency
+#include <thread>        // jthread
+#include <cmath>          // pow
+#include <iomanip>        // setprecision
+#include <set>            // set
 
-/// @brief A class representing a mathematical vector.
-/// @tparam T The datatype of the vector elements.
+#include "Utils.hpp"
+
 template <typename T>
-class Vector {
-public:
-	std::vector<T> vec;
-	size_t dim;
-
-	/// @brief Construct a vector from a std::vector.
-	/// @param rray The std::vector to initialize the vector with.
-	Vector(const std::vector<T>& rray)
-		: vec(rray), dim(vec.size()) {}
-
-	/// @brief Construct a vector by moving a std::vector.
-	/// @param rray The std::vector to initialize the vector with.
-	Vector(std::vector<T>&& rray) 
-		: vec(std::move(rray)), dim(vec.size()) {}
-
-	/// @brief Construct a vector with a specified dimension.
-	/// @param dim The dimension of the vector.
-	Vector(size_t dim)
-		: dim(dim), vec(dim, T{ 0 }) { }
-
-	Vector(size_t dim, T val)
-		: dim(dim), vec(dim, T{ val }) {
-	}
-
-	using iterator = typename std::vector<T>::iterator;
-	using const_iterator = typename std::vector<T>::const_iterator;
-
-	/// @brief Get an iterator to the beginning of the vector.
-	/// @return An iterator to the beginning of the vector.
-	iterator begin() { return vec.begin(); }
-
-	/// @brief Get an iterator to the end of the vector.
-	/// @return An iterator to the end of the vector.
-	iterator end() { return vec.end(); }
-
-	/// @brief Get a const iterator to the beginning of the vector.
-	/// @return A const iterator to the beginning of the vector.
-	const_iterator begin() const { return vec.begin(); }
-
-	/// @brief Get a const iterator to the end of the vector.
-	/// @return A const iterator to the end of the vector.
-	const_iterator end() const { return vec.end(); }
-
-	/// @brief Check if the dimensions of this vector match those of another vector.
-	/// @param other The other vector to compare dimensions with.
-	/// @return True if the dimensions match, false otherwise.
-	bool dims_equal(const Vector& other) const {
-		return this->dim == other.dim;
-	}
-
-	bool empty() const {
-		return this->vec.begin() == this->vec.end();
-	}
-
-	/// @brief Get a mutable reference to the element at a specific index.
-	/// @param idx The index of the element to retrieve.
-	/// @return A mutable reference to the element at the specified index.
-	T& operator()(size_t idx) {
-		if (0 > idx || idx >= this->dim)
-			throw std::invalid_argument("Vector index out of range.");
-		return vec[idx];
-	}
-	
-	/// @brief Get the element at a specific index.
-	/// @param idx The index of the element to retrieve.
-	/// @return The element at the specified index.
-	const T& operator()(size_t idx) const {
-		if (0 > idx || idx >= this->dim) 
-			throw std::invalid_argument("Vector index out of range.");
-		return vec[idx];
-	}
-
-	/// @brief Perform an element-wise operation on this vector and another vector.
-	/// @param other The other vector to perform the operation with.
-	/// @param func The function to apply element-wise.
-	/// @return The result of the element-wise operation.
-	template <typename U>
-	auto _element_wise(const Vector<U>& other, auto func) const {
-		if (!dims_equal(other)) 
-			throw std::invalid_argument("Vector dimensions must match.");
-		
-		using ResultType = std::common_type_t<T, U>;
-		Vector<ResultType> result(this->dim);
-		
-		std::transform(std::execution::par_unseq, 
-			vec.begin(), vec.end(), 
-			other.begin(), result.begin(), 
-			func
-		);
-		return result;
-	}
-
-	/// @brief Add another vector to this vector.
-	/// @param other The other vector to add.
-	/// @return The result of the addition.
-	template <typename U>
-	auto operator+(const Vector<U>& other) const {
-		return _element_wise(other, std::plus<>());
-	}
-
-	/// @brief Subtract another vector from this vector.
-	/// @param other The other vector to subtract.
-	/// @return The result of the subtraction.
-	template <typename U>
-	auto operator-(const Vector& other) const {
-		return _element_wise(other, std::minus<>());
-	}
-
-	/// @brief Calculate the dot product of this vector and another vector.
-	/// @param other The other vector to calculate the dot product with.
-	/// @return The dot product of the two vectors.
-	template <typename U>
-	auto operator*(const Vector<U>& other) const {
-		if (!dims_equal(other)) 
-			throw std::invalid_argument("Vector dimensions must match.");
-
-		return std::transform_reduce(
-			std::execution::par_unseq, 
-			vec.begin(), vec.end(), 
-			other.begin(), 0, 
-			std::plus<>(), std::multiplies<>()
-		);
-	}
-
-	/// @brief Multiply this vector by a scalar.
-	/// @param scalar The scalar to multiply by.
-	/// @return The result of the multiplication.
-	template <typename U>
-	auto operator*(const U& scalar) const {
-		using ResultType = std::common_type_t<T, U>;
-		Vector<ResultType> result(this->dim);
-
-		std::transform(std::execution::par_unseq,
-			vec.begin(),
-			vec.end(),
-			result.begin(), [&](T val) { return val * scalar; }
-		);
-		return result;
-	}
-
-	/// @brief Divide this vector by a scalar.
-	/// @tparam U The datatype of the scalar.
-	/// @param divisor The scalar to divide by.
-	/// @return The result of the division.
-	template <typename U>
-	Vector<float> operator/(const U& divisor) const {
-		if (divisor == 0) throw std::invalid_argument("Divisor must not be Zero.");
-		Vector<float> result(this->dim);
-		std::transform(std::execution::par_unseq, 
-			vec.begin(), 
-			vec.end(), 
-			result.begin(), 
-			[&](T val) { 
-				return static_cast<float>(val) / static_cast<float>(divisor); 
-			}
-		);
-		return result;
-	}
-
-	/// @brief Normalize this vector.
-	/// @return The normalized vector.
-	Vector<float> normalize() const {
-		auto mag = magnitude(*this);
-		if (mag == 0) throw std::invalid_argument("Cannot normalize a Zero-Vector.");
-		return (*this) / mag;
-	}
-
-	/// @brief Calculate the scalar projection of this vector onto another vector.
-	/// @param other The other vector to project onto.
-	/// @return The scalar projection of this vector onto the other vector.
-	float scalar_proj_on(const Vector& other) {
-		return (*this * other) / magnitude(other);
-	}
-
-	/// @brief Calculate the vector projection of this vector onto another vector.
-	/// @param other The other vector to project onto.
-	/// @return The Vector object of the projection of this vector onto the other vector.
-	Vector<float> vector_proj_on(const Vector& other) {
-		return other.normalize() * scalar_proj_on(other);
-	}
-
-	/// @brief Calculate the angle between this vector and another vector.
-	/// @param other The other vector to calculate the angle with.
-	/// @return The angle between the two vectors in radians.
-	float angle_between(const Vector& other) {
-		return std::acos(((*this) * other) / (magnitude(*this) * magnitude(other)));
-	}
-
-	/// @brief Calculate the cosine similarity between this vector and another vector.
-	/// @param other The other vector to calculate the cosine similarity with.
-	/// @return The cosine similarity between the two vectors within range [-1, 1].
-	float cosine_similarity(const Vector& other) {
-		return ((*this) * other) / (magnitude(*this) * magnitude(other));
-	}
-
-	/// @brief Convert this vector to a Vector of floats.
-	/// @return The converted vector.
-	Vector<float> to_float() const {
-		std::vector<float> converted(vec.begin(), vec.end());
-		return Vector<float>(std::move(converted));
-	}
-
-
-};
-
-/// @brief Calculate the magnitude of a vector.
-/// @param arr The std::vector for which to calculate the magnitude.
-/// @return The magnitude of the vector.
-template <typename T>
-float magnitude(const std::vector<T>& arr) {
-	auto square_sum = std::reduce(
-		std::execution::par_unseq,
-		arr.begin(),
-		arr.end(),
-		T{ 0 },
-		[](T total, T num) { return total + num * num; }
-	);
-	return static_cast<float>(std::sqrt(square_sum));
-}
-
-/// @brief Calculate the magnitude of a Vector.
-/// @param vector The vector object for which to calculate the magnitude.
-/// @return The magnitude of the vector.
-template <typename T>
-float magnitude(const Vector<T>& vector) {
-	return magnitude(vector.vec);
-}
-
-/// @brief Perform the Gram-Schmidt process on a set of vectors.
-/// @param input_vectors The vectors to orthogonalize.
-/// @return An std::vector containing the orthogonal basis vectors.
-template <typename T>
-std::vector<Vector<float>> gram_schmidt(std::vector<Vector<T>>& input_vectors)
-{
-	std::vector<Vector<float>> ortho_basis;
-	if (input_vectors.empty()) return ortho_basis;
-
-	ortho_basis.push_back(input_vectors[0].normalize());
-
-	for (size_t i = 1; i < input_vectors.size(); i++)
-	{
-		Vector<float> v = input_vectors[i].to_float();
-		for (const auto& basis : ortho_basis)
-		{
-			Vector<float> projection = input_vectors[i].to_float().vector_proj_on(basis);
-			v = v - projection;
-		}
-		ortho_basis.push_back(v.normalize());
-	}
-	return ortho_basis;
-}
-
-/// @brief Perform the Gram-Schmidt process on a set of vectors.
-/// @tparam ...Args The types of the input vectors.
-/// @param ...args The vectors to orthogonalize.
-/// @return An std::vector containing the orthogonal basis vectors.
-template <typename T, typename... Args>
-std::vector<Vector<float>> gram_schmidt(Args&&... args)
-{
-	std::vector<Vector<T>> input_vectors{ std::forward<Args>(args)... };
-	std::vector<Vector<float>> ortho_basis;
-	if (input_vectors.empty()) return ortho_basis;
-
-	ortho_basis.push_back(input_vectors[0].normalize());
-
-	for (size_t i = 1; i < input_vectors.size(); i++)
-	{
-		Vector<float> v = input_vectors[i].to_float();
-		for (const auto& basis : ortho_basis)
-		{
-			Vector<float> projection = input_vectors[i].to_float().vector_proj_on(basis);
-			v = v - projection;
-		}
-		ortho_basis.push_back(v.normalize());
-	}
-	return ortho_basis;
-}
-
-/// @brief Print the elements of a vector to the console, each on a new line, followed by an empty line for separation.
-/// @tparam T The datatype of the vector elements.
-/// @param vector The vector object to print.
-template <typename T>
-void printVec(const Vector<T> vector) {
-	for (size_t i = 0; i < vector.dim; i++) {
-		std::cout << vector(i) << "\n";
-	}
-	std::cout << std::endl;
-}
+class Vector;
 
 /// @brief A class representing a matrix.
 /// @tparam T The datatype of the matrix elements.
@@ -318,13 +29,13 @@ public:
 	/// @param r The number of rows.
 	/// @param c The number of columns.
 	Matrix(size_t r, size_t c)
-		: rows(r), cols(c), rix(r * c, T{}) {
+		: rows(r), cols(c), rix(r* c, T{}) {
 	}
 
 	/// @brief Construct a square matrix with the specified dimension. Filled with default values of the specified datatype.
 	/// @param dim The dimension of the square matrix.
 	Matrix(size_t dim)
-		: rows(dim), cols(dim), rix(dim * dim, T{}) {
+		: rows(dim), cols(dim), rix(dim* dim, T{}) {
 	}
 
 	/// @brief Construct a matrix with the specified dimensions and fill value.
@@ -332,7 +43,7 @@ public:
 	/// @param c The number of columns.
 	/// @param fill The value to fill the matrix with.
 	Matrix(size_t r, size_t c, const T& fill)
-		: rows(r), cols(c), rix(r * c, fill) {
+		: rows(r), cols(c), rix(r* c, fill) {
 	}
 
 	/// @brief Construct a matrix with the specified dimensions and a list of values.
@@ -349,11 +60,11 @@ public:
 	/// @tparam U The datatype of the argument matrix
 	/// @param other The matrix to be converted to desired datatype
 	template <typename U>
-	Matrix(const Matrix<U>& other) : rows(other.rows), cols(other.cols), rix(other.rows * other.cols, T{}) {
+	Matrix(const Matrix<U>& other) : rows(other.rows), cols(other.cols), rix(other.rows* other.cols, T{}) {
 		std::transform(
 			std::execution::par_unseq,
 			other.rix.begin(), other.rix.end(),
-			this->rix.begin(), 
+			this->rix.begin(),
 			[](const U& val) { return static_cast<T>(val); }
 		);
 	}
@@ -361,7 +72,7 @@ public:
 	/// @brief Check if the matrix is square.
 	/// @return The dimension of the square matrix if it is square, otherwise 0.
 	int is_square() const {
-		if (this->rows == this->cols) 
+		if (this->rows == this->cols)
 			return this->rows;
 		return 0;
 	}
@@ -405,15 +116,15 @@ public:
 
 	/// @brief Fill the matrix with zeros.
 	void fill_zeros() {
-		std::fill(std::execution::par_unseq, 
-			rix.begin(), rix.end(), 
+		std::fill(std::execution::par_unseq,
+			rix.begin(), rix.end(),
 			static_cast<T>(0)
 		);
 	}
 
 	/// @brief Fill the matrix with random integer values based on specified range[start, stop).
-	/// @param low The lower bound of the range.
-	/// @param high The upper bound of the range.
+	/// @param low The lower bound of the range (included).
+	/// @param high The upper bound of the range (excluded).
 	void fill_random_int(int low, int high) {
 		for (auto& num : rix) {
 			num = static_cast<T>(generate_random(low, high, false));
@@ -512,7 +223,7 @@ public:
 	auto hadamard(const Matrix<U>& other) const {
 		if (!dims_equal(other))
 			throw std::invalid_argument("Matrix dimensions must match.");
-		return _element_wisea(other, std::multiplies<>());
+		return _element_wise(other, std::multiplies<>());
 	}
 
 	/// @brief Multiply this matrix by another matrix.
@@ -524,7 +235,7 @@ public:
 		if (this->cols != other.rows)
 			throw std::invalid_argument("Column count of first and Row count of second must match for matrix multiplication.");
 
-		if (this->rows * this->cols * other.rows < 4'000'000) 
+		if (this->rows * this->cols * other.rows < 4'000'000)
 		{
 			Matrix<T> result(this->rows, other.cols);
 			for (int i = 0; i < this->rows; i++) {
@@ -536,7 +247,7 @@ public:
 			}
 			return result;
 		}
-		else 
+		else
 		{
 			auto thread_count = std::thread::hardware_concurrency();
 			float row_thread_ratio = this->rows / thread_count;
@@ -580,7 +291,7 @@ public:
 	/// @return A new matrix containing the product.
 	Matrix<float> operator*(const float scalar) const {
 		Matrix<float> result(this->rows, this->cols);
-		std::transform(std::execution::par_unseq, 
+		std::transform(std::execution::par_unseq,
 			this->rix.begin(), this->rix.end(),
 			result.rix.begin(), [scalar](T val) { return val * scalar; }
 		);
@@ -632,7 +343,7 @@ public:
 /// @tparam T The datatype of the matrix elements.
 /// @param mat The matrix to print.
 template <typename T>
-void printMatrix(const Matrix<T>& mat) {
+inline void printMatrix(const Matrix<T>& mat) {
 	std::cout << std::endl << mat.rows << "x" << mat.cols << std::endl;
 	for (int i = 0; i < mat.rows; i++) {
 		for (int j = 0; j < mat.cols; j++) {
@@ -646,7 +357,7 @@ void printMatrix(const Matrix<T>& mat) {
 /// @param r The number of rows in the matrix.
 /// @param c The number of columns in the matrix.
 /// @return A matrix filled with random float values.
-Matrix<float> mat_random_uniform(size_t r, size_t c) {
+inline Matrix<float> mat_random_uniform(size_t r, size_t c) {
 	Matrix<float> mat(r, c);
 	for (auto& num : mat.rix) {
 		num = static_cast<float>(generate_random(0, 0, true));
@@ -654,7 +365,7 @@ Matrix<float> mat_random_uniform(size_t r, size_t c) {
 	return mat;
 }
 
-Matrix<float> mat_random_normal(size_t r, size_t c, float mean=0, float variance=1) {
+inline Matrix<float> mat_random_normal(size_t r, size_t c, float mean = 0, float variance = 1) {
 	Matrix<float> mat(r, c);
 	for (auto& num : mat.rix) {
 		num = generate_random_n(mean, variance);
@@ -669,8 +380,8 @@ Matrix<float> mat_random_normal(size_t r, size_t c, float mean=0, float variance
 /// @param start The lower bound of the random value range.
 /// @param stop The upper bound of the random value range.
 /// @return A matrix filled with random integer values.
-Matrix<int> mat_random_int_range(size_t r, size_t c, int start, int stop) {
-	if (start > stop) 
+inline Matrix<int> mat_random_int_range(size_t r, size_t c, int start, int stop) {
+	if (start > stop)
 		throw std::invalid_argument("Start must be greater than Stop");
 	Matrix<int> mat(r, c);
 	for (auto& num : mat.rix) {
@@ -684,7 +395,7 @@ Matrix<int> mat_random_int_range(size_t r, size_t c, int start, int stop) {
 /// @param mat The square matrix for which to calculate the trace.
 /// @return The trace of the matrix.
 template <typename T>
-T trace(Matrix<T>& mat) {
+T trace(const Matrix<T>& mat) {
 	if (mat.is_square() == 0) throw std::invalid_argument("Matrix must be a square matrix.");
 	T total{ 0 };
 	for (int i = 0; i < mat.rows; i++) {
@@ -694,7 +405,7 @@ T trace(Matrix<T>& mat) {
 }
 
 template <typename T>
-Matrix<T> transpose(Matrix<T>& mat) {
+Matrix<T> transpose(const Matrix<T>& mat) {
 	Matrix<T> result(mat.cols, mat.rows);
 	for (int c = 0; c < result.cols; c++) {
 		for (int r = 0; r < result.rows; r++) {
@@ -829,6 +540,56 @@ Vector<float> bwd_substitution(const Matrix<T>& U, const Vector<U_type>& y) {
 	return x;
 }
 
+/// @brief Extract a submatrix by excluding a specific row and column.
+/// @tparam T The datatype of the matrix elements.
+/// @param mat The original matrix.
+/// @param exclude_row The index of the row to exclude.
+/// @param exclude_col The index of the column to exclude.
+/// @return The resulting submatrix.
+template <typename T>
+Matrix<T> submatrix(const Matrix<T>& mat, int exclude_row, int exclude_col) {
+	Matrix<T> result(mat.rows - 1, mat.cols - 1);
+	result.rix.clear();
+
+	for (int i = 0; i < mat.rows; i++) {
+		if (i == exclude_row) continue;
+
+		for (int j = 0; j < mat.cols; j++) {
+			if (j == exclude_col) continue;
+
+			result.rix.push_back(mat(i, j));
+		}
+	}
+	return result;
+}
+
+/// @brief Extract a submatrix by excluding multiple rows and columns specified in sets.
+/// @tparam T The datatype of the matrix elements.
+/// @param mat The original matrix.
+/// @param exclude_rows The set of row indices to exclude.
+/// @param exclude_cols The set of column indices to exclude.
+/// @return The resulting submatrix.
+template <typename T>
+Matrix<T> submatrix(const Matrix<T>& mat, std::set<int> exclude_rows, std::set<int> exclude_cols) {
+
+	if (exclude_rows.size() > mat.rows || exclude_cols.size() > mat.cols)
+		throw std::invalid_argument("Exclusion set size exceeded matrix dimensions.");
+
+	Matrix<T> result(mat.rows - exclude_rows.size(), mat.cols - exclude_cols.size());
+	result.rix.clear();
+
+	for (int i = 0; i < mat.rows; i++) {
+		if (exclude_rows.find(i) != exclude_rows.end()) continue;
+
+		for (int j = 0; j < mat.cols; j++) {
+			if (exclude_cols.find(j) != exclude_cols.end()) continue;
+
+			result.rix.push_back(mat(i, j));
+		}
+	}
+	return result;
+}
+
 /// @brief Find matrix determinant using Laplace expansion by minors. 
 /// Note that this method is inefficient for large matrices and is intended for educational purposes. 
 /// For larger matrices, consider using more efficient algorithms like LU decomposition or SVD.
@@ -865,7 +626,7 @@ int det(const Matrix<T>& mat) {
 /// @param mat The square matrix for which to find the cofactor matrix.
 /// @return The cofactor matrix.
 template <typename T>
-Matrix<T> cofactor(Matrix<T>& mat) {
+Matrix<T> cofactor(const Matrix<T>& mat) {
 	if (mat.is_square() == 0) throw std::invalid_argument("Matrix must be a square matrix.");
 
 	Matrix<T> result(mat.rows, mat.cols);
@@ -890,7 +651,7 @@ Matrix<T> cofactor(Matrix<T>& mat) {
 /// @param mat The square matrix for which to find the adjugate.
 /// @return The adjugate of the matrix.
 template <typename T>
-Matrix<T> adj(Matrix<T>& mat) {
+Matrix<T> adj(const Matrix<T>& mat) {
 	auto cof = cofactor(mat);
 	return transpose(cof);
 }
@@ -943,7 +704,7 @@ Matrix<T> vecs_to_mat(std::vector<Vector<T>> vecs) {
 /// @param mat The square matrix for which to find the inverse.
 /// @return The inverse of the matrix.
 template <typename T>
-Matrix<float> inv(Matrix<T>& mat) {
+Matrix<float> inv(const Matrix<T>& mat) {
 	if (mat.is_square() == 0)
 		throw std::invalid_argument("Matrix must be a square matrix.");
 
@@ -1018,52 +779,3 @@ bool is_lin_independent(const Matrix<T>& mat) {
 	return det(mat);
 }
 
-/// @brief Extract a submatrix by excluding a specific row and column.
-/// @tparam T The datatype of the matrix elements.
-/// @param mat The original matrix.
-/// @param exclude_row The index of the row to exclude.
-/// @param exclude_col The index of the column to exclude.
-/// @return The resulting submatrix.
-template <typename T>
-Matrix<T> submatrix(const Matrix<T>& mat, int exclude_row, int exclude_col) {
-	Matrix<T> result(mat.rows - 1, mat.cols - 1);
-	result.rix.clear();
-
-	for (int i = 0; i < mat.rows; i++) {
-		if (i == exclude_row) continue;
-
-		for (int j = 0; j < mat.cols; j++) {
-			if (j == exclude_col) continue;
-
-			result.rix.push_back(mat(i, j));
-		}
-	}
-	return result;
-}
-
-/// @brief Extract a submatrix by excluding multiple rows and columns specified in sets.
-/// @tparam T The datatype of the matrix elements.
-/// @param mat The original matrix.
-/// @param exclude_rows The set of row indices to exclude.
-/// @param exclude_cols The set of column indices to exclude.
-/// @return The resulting submatrix.
-template <typename T>
-Matrix<T> submatrix(const Matrix<T>& mat, std::set<int> exclude_rows, std::set<int> exclude_cols) {
-
-	if (exclude_rows.size() > mat.rows || exclude_cols.size() > mat.cols)
-		throw std::invalid_argument("Exclusion set size exceeded matrix dimensions.");
-
-	Matrix<T> result(mat.rows - exclude_rows.size(), mat.cols - exclude_cols.size());
-	result.rix.clear();
-
-	for (int i = 0; i < mat.rows; i++) {
-		if (exclude_rows.find(i) != exclude_rows.end()) continue;
-
-		for (int j = 0; j < mat.cols; j++) {
-			if (exclude_cols.find(j) != exclude_cols.end()) continue;
-
-			result.rix.push_back(mat(i, j));
-		}
-	}
-	return result;
-}

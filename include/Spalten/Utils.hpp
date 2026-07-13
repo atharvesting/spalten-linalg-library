@@ -1,9 +1,8 @@
 #pragma once
-#pragma once
-#include <random>
-#include <cmath>
-#include <sstream>
-#include <chrono>
+#include <random>        // random_device, mt19937, uniform_real_distribution, uniform_int_distribution, normal_distribution
+#include <cmath>         // exp, floor, round
+#include <sstream>       // ostringstream
+#include <chrono>        // steady_clock, duration, time_point, duration_cast
 
 double generate_random(int low, int high, bool zero2one) {
 	static std::random_device rd;

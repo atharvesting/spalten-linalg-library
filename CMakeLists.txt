@@ -4,14 +4,15 @@ project(SpaltenSolution VERSION 1.0.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-add_subdirectory(Spalten)
+# Add the header-only library target
+add_subdirectory(src)
 
 if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
     enable_testing()
-    add_subdirectory(Spalten_Test)
-    
-    # Add a separate executable for manual testing
-    add_executable(SpaltenManualTest Spalten_Test/main.cpp)
+    add_subdirectory(tests)
+
+    # Separate manual-test executable using tests/main.cpp
+    add_executable(SpaltenManualTest tests/main.cpp)
     target_link_libraries(SpaltenManualTest PRIVATE Spalten)
 endif()
 

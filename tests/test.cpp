@@ -1,6 +1,7 @@
-#include "pch.h"
-#include "../Spalten/matrix.h"
 #include <vector>
+#include "pch.h"
+#include <Spalten/Matrix.hpp>
+#include <Spalten/Vector.hpp>
 
 TEST(VectorTests, VectorLvalueConstructor) {
     std::vector<int> vec1{ 3, 4, 5, 6, 7 };
@@ -49,16 +50,16 @@ TEST(VectorTests, IteratorCheck) {
 TEST(VectorTests, DimsMatch) {
     Vector<int> v1(3, 5); // 3d vector filled with 5s
     Vector<int> v2(3, 7); // 3d vector filled with 7s
-    EXPECT_TRUE(v1.dims_match(v2));
+    EXPECT_TRUE(v1.dims_equal(v2));
 
     Vector<int> v3(4, 5);
-    EXPECT_FALSE(v2.dims_match(v3));
+    EXPECT_FALSE(v2.dims_equal(v3));
 
     Vector<int> v4(std::vector<int>{});
-    EXPECT_FALSE(v3.dims_match(v4));
+    EXPECT_FALSE(v3.dims_equal(v4));
 
     Vector<int> v5(std::vector<int>{});
-    EXPECT_TRUE(v4.dims_match(v5));
+    EXPECT_TRUE(v4.dims_equal(v5));
 }
 
 TEST(VectorTests, VectorEmpty) {
@@ -106,6 +107,8 @@ TEST(VectorTests, IncompatibleDimensions) {
 	EXPECT_THROW(v1 - v2, std::invalid_argument);
 	EXPECT_THROW(v1 * v2, std::invalid_argument);
 }
+
+//================================================//
 
 TEST(MatrixTests, CanFillAndAccessElements) {
     Matrix<int> mat(2, 3);
