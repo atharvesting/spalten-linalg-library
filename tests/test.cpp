@@ -108,6 +108,15 @@ TEST(VectorTests, IncompatibleDimensions) {
 	EXPECT_THROW(v1 * v2, std::invalid_argument);
 }
 
+TEST(VectorTests, DotProductWithFractionsDetectsIntegerAccumulationBug) { // AI
+    // This test will fail if Vector::operator* reduces into an integer init (bug).
+    Vector<float> a(std::vector<float>{0.5f, 0.5f});
+    Vector<float> b(std::vector<float>{0.5f, 0.5f});
+    const float expected = 0.5f;
+    const float eps = 1e-6f;
+    EXPECT_NEAR(a * b, expected, eps);
+}
+
 //================================================//
 
 TEST(MatrixTests, CanFillAndAccessElements) {
@@ -186,3 +195,71 @@ TEST(MatrixTests, DimsEqual) {
     EXPECT_EQ(b.dims_equal(m), true);
     EXPECT_EQ(c.dims_equal(m), false);
 }
+
+TEST(MatrixTests, TransposeContentsAndShape) { // AI
+    Matrix<int> m(2, 3);
+    int val = 1;
+    for (size_t r = 0; r < m.rows; ++r)
+        for (size_t c = 0; c < m.cols; ++c)
+            m(r, c) = val++;
+
+    auto t = transpose(m);
+    EXPECT_EQ(t.rows, 3u);
+    EXPECT_EQ(t.cols, 2u);
+
+    // check elements: t(r,c) == m(c,r)
+    for (size_t r = 0; r < t.rows; ++r)
+        for (size_t c = 0; c < t.cols; ++c)
+            EXPECT_EQ(t(r, c), m(c, r));
+}
+
+TEST(MatrixTests, InverseRoundTripApproximatelyIdentity) { // AI
+    Matrix<float> A(2, 2);
+    A(0, 0) = 4.0f; A(0, 1) = 7.0f;
+    A(1, 0) = 2.0f; A(1, 1) = 6.0f;
+
+    auto Ainv = inv(A);
+    auto prod = A * Ainv;
+
+    const float eps = 1e-4f;
+    EXPECT_EQ(prod.rows, 2u);
+    EXPECT_EQ(prod.cols, 2u);
+    for (size_t i = 0; i < 2; ++i)
+        for (size_t j = 0; j < 2; ++j)
+            EXPECT_NEAR(prod(i, j), (i == j ? 1.0f : 0.0f), eps);
+}
+
+TEST(MatrixTests, LURecomposeMatchesOriginal) { // AI
+    Matrix<float> A(3, 3);
+    A(0, 0) = 2; A(0, 1) = 1; A(0, 2) = 1;
+    A(1, 0) = 4; A(1, 1) = -6; A(1, 2) = 0;
+    A(2, 0) = -2; A(2, 1) = 7; A(2, 2) = 2;
+
+    auto lu = LU_decomp(A); // lu.L and lu.U are float matrices
+    auto recomposed = lu.L * lu.U;
+
+    const float eps = 1e-4f;
+    EXPECT_EQ(recomposed.rows, A.rows);
+    EXPECT_EQ(recomposed.cols, A.cols);
+    for (size_t r = 0; r < A.rows; ++r)
+        for (size_t c = 0; c < A.cols; ++c)
+            EXPECT_NEAR(recomposed(r, c), A(r, c), eps);
+}
+
+TEST(MatrixTests, MatToVecsAndBackRoundtrip) { // AI
+    Matrix<int> M(3, 2);
+    M(0, 0) = 1; M(1, 0) = 2; M(2, 0) = 3;
+    M(0, 1) = 4; M(1, 1) = 5; M(2, 1) = 6;
+
+    auto vecs = mat_to_vecs(M);
+    auto M2 = vecs_to_mat(vecs);
+
+    EXPECT_EQ(M.rows, M2.rows);
+    EXPECT_EQ(M.cols, M2.cols);
+    for (size_t r = 0; r < M.rows; ++r)
+        for (size_t c = 0; c < M.cols; ++c)
+            EXPECT_EQ(M(r, c), M2(r, c));
+}
+
+
+

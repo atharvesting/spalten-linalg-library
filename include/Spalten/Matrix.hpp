@@ -5,8 +5,7 @@
 #include <utility>        // move, pair
 #include <type_traits>    // common_type_t
 #include <execution>      // execution::par_unseq
-#include <thread>         // thread::hardware_concurrency
-#include <thread>        // jthread
+#include <thread>         // hardware_concurrency, jthread
 #include <cmath>          // pow
 #include <iomanip>        // setprecision
 #include <set>            // set
@@ -67,14 +66,6 @@ public:
 			this->rix.begin(),
 			[](const U& val) { return static_cast<T>(val); }
 		);
-	}
-
-	/// @brief Check if the matrix is square.
-	/// @return The dimension of the square matrix if it is square, otherwise 0.
-	int is_square() const {
-		if (this->rows == this->cols)
-			return this->rows;
-		return 0;
 	}
 
 	/// @brief Generate an rXc matrix filled with zeros from the appropriate datatype.
@@ -175,11 +166,23 @@ public:
 	bool operator==(const Matrix<T>& other) const {
 		if (!dims_equal(other))
 			return false;
+		return std::equal(this->rix.begin(), this->rix.end(), other.rix.begin());
+	}
 
-		for (int i = 0; i < this->rix.size(); i++) {
-			if (this->rix[i] != other.rix[i]) return false;
-		}
-		return true;
+	/// @brief Check if the matrix is square.
+	/// @return The dimension of the square matrix if it is square, otherwise 0.
+	int is_square() const {
+		if (this->rows == this->cols)
+			return this->rows;
+		return 0;
+	}
+
+	/// @brief Check if the matrix is symmetric. A matrix is symmetric if it is square and equal to its transpose.
+	/// @return True if the matrix is symmetric, false otherwise.
+	bool is_symmetric() const {
+		if (this->is_square() == 0)
+			return false;
+		return *this == transpose(*this);
 	}
 
 	template <typename U>
@@ -219,6 +222,10 @@ public:
 		return _element_wise(other, std::minus<>());
 	}
 
+	/// @brief Calculate the Hadamard product (element-wise multiplication) of this matrix with another matrix.
+	/// @tparam U The datatype of the other matrix elements.
+	/// @param other The other matrix to multiply element-wise.
+	/// @return A new matrix containing the Hadamard product.
 	template <typename U>
 	auto hadamard(const Matrix<U>& other) const {
 		if (!dims_equal(other))
@@ -303,39 +310,6 @@ public:
 	Matrix<T> operator-() const {
 		return (*this) * -1;
 	}
-
-	template <typename U>
-	Matrix<T> fast_mult(const Matrix<U>& other) const {
-		if (this->cols != other.rows)
-			throw std::invalid_argument("Column count of first and Row count of second must match for matrix multiplication.");
-
-		auto thread_count = std::thread::hardware_concurrency();
-		float row_thread_ratio = this->rows / thread_count;
-		int chunks = row_thread_ratio > 4 ? static_cast<int>(row_thread_ratio) : 4;
-
-		Matrix<T> result(this->rows, other.cols);
-		std::vector<std::jthread> workers;
-
-		for (unsigned int t = 0; t < thread_count; t++) {
-			size_t start_row = t * chunks;
-			size_t end_row = std::min(start_row + chunks, this->rows);
-
-			if (start_row < end_row) {
-				workers.emplace_back([&, start_row, end_row]() {
-					for (size_t r = start_row; r < end_row; r++) {
-						for (size_t c = 0; c < other.cols; c++) {
-							T res{};
-							for (size_t k = 0; k < this->cols; k++) {
-								res += (*this)(r, k) * other(k, c);
-							}
-							result(r, c) = res;
-						}
-					}
-					});
-			}
-		}
-		return result;
-	}
 };
 
 
@@ -343,7 +317,7 @@ public:
 /// @tparam T The datatype of the matrix elements.
 /// @param mat The matrix to print.
 template <typename T>
-inline void printMatrix(const Matrix<T>& mat) {
+void printMatrix(const Matrix<T>& mat) {
 	std::cout << std::endl << mat.rows << "x" << mat.cols << std::endl;
 	for (int i = 0; i < mat.rows; i++) {
 		for (int j = 0; j < mat.cols; j++) {
@@ -365,6 +339,12 @@ inline Matrix<float> mat_random_uniform(size_t r, size_t c) {
 	return mat;
 }
 
+/// @brief Generate an rXc matrix with random float values from a normal distribution.
+/// @param r The number of rows in the matrix.
+/// @param c The number of columns in the matrix.
+/// @param mean The mean of the normal distribution.
+/// @param variance The variance of the normal distribution.
+/// @return A matrix filled with random float values from the normal distribution.
 inline Matrix<float> mat_random_normal(size_t r, size_t c, float mean = 0, float variance = 1) {
 	Matrix<float> mat(r, c);
 	for (auto& num : mat.rix) {
@@ -404,6 +384,10 @@ T trace(const Matrix<T>& mat) {
 	return total;
 }
 
+/// @brief Calculate the transpose of a matrix.
+/// @tparam T The datatype of the matrix elements.
+/// @param mat The matrix to transpose.
+/// @return The transposed matrix.
 template <typename T>
 Matrix<T> transpose(const Matrix<T>& mat) {
 	Matrix<T> result(mat.cols, mat.rows);
@@ -616,6 +600,7 @@ int det(const Matrix<T>& mat) {
 	else {
 		auto lu = LU_decomp(mat);
 		return diag_prod(lu.U);
+
 	}
 }
 
@@ -627,7 +612,8 @@ int det(const Matrix<T>& mat) {
 /// @return The cofactor matrix.
 template <typename T>
 Matrix<T> cofactor(const Matrix<T>& mat) {
-	if (mat.is_square() == 0) throw std::invalid_argument("Matrix must be a square matrix.");
+	if (mat.is_square() == 0) 
+		throw std::invalid_argument("Matrix must be a square matrix.");
 
 	Matrix<T> result(mat.rows, mat.cols);
 
@@ -719,7 +705,6 @@ Matrix<float> inv(const Matrix<T>& mat) {
 	* This gives us n systems of simultaneous equations that we can solve to find i1, i2,..., i_n
 	*	which are the n column vectors that make up the inv(A) matrix
 	*/
-
 	auto lu = LU_decomp(mat);
 
 	// FORWARD SUBSTITUTION

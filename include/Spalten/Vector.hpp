@@ -37,6 +37,9 @@ public:
 		: dim(dim), vec(dim, T{ 0 }) {
 	}
 
+	/// @brief Construct a vector with a specified dimension and fill value.
+	/// @param dim The dimension of the vector.
+	/// @param val The value to fill the vector with.
 	Vector(size_t dim, T val)
 		: dim(dim), vec(dim, T{ val }) {
 	}
@@ -67,6 +70,8 @@ public:
 		return this->dim == other.dim;
 	}
 
+	/// @brief Check if the vector is empty.
+	/// @return True if the vector is empty, false otherwise.
 	bool empty() const {
 		return this->vec.begin() == this->vec.end();
 	}
@@ -87,6 +92,15 @@ public:
 		if (0 > idx || idx >= this->dim)
 			throw std::invalid_argument("Vector index out of range.");
 		return vec[idx];
+	}
+
+	/// @brief Check if this vector is equal to another vector.
+	/// @param other The other vector to compare with.
+	/// @return True if the vectors are equal, false otherwise.
+	bool operator==(const Vector<T>& other) const {
+		if (!dims_equal(other))
+			return false;
+		return std::equal(this->begin(), this->end(), other.begin());
 	}
 
 	/// @brief Perform an element-wise operation on this vector and another vector.
@@ -136,7 +150,7 @@ public:
 		return std::transform_reduce(
 			std::execution::par_unseq,
 			vec.begin(), vec.end(),
-			other.begin(), 0,
+			other.begin(), std::common_type_t<T, U>{},
 			std::plus<>(), std::multiplies<>()
 		);
 	}

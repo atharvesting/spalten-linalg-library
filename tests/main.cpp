@@ -1,7 +1,7 @@
 #pragma once
-#include "Matrix.hpp"
-#include "Vector.hpp"
-#include "Utils.hpp"
+#include <Spalten/Matrix.hpp>
+#include <Spalten/Vector.hpp>
+#include <Spalten/Utils.hpp>
 #include <iostream>
 #include <vector>
 #include <cmath>
