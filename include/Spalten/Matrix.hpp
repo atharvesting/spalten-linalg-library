@@ -1,3 +1,4 @@
+#pragma once
 #include <vector>         // vector
 #include <algorithm>      // transform, fill, min
 #include <iostream>       // cout, fixed, endl
@@ -11,9 +12,7 @@
 #include <set>            // set
 
 #include "Utils.hpp"
-
-template <typename T>
-class Vector;
+#include "Vector.hpp"
 
 /// @brief A class representing a matrix.
 /// @tparam T The datatype of the matrix elements.
@@ -148,7 +147,7 @@ public:
 	const T& operator()(size_t r, size_t c) const {
 		auto x = r * cols + c;
 		if (0 > x || x >= rows * cols)
-			throw std::invalid_argument("Index out of bounds.")
+			throw std::invalid_argument("Index out of bounds.");
 		return rix[x];
 	}
 
@@ -160,7 +159,7 @@ public:
 	T& operator()(size_t r, size_t c) {
 		auto x = r * cols + c;
 		if (0 > x || x >= rows * cols)
-			throw std::invalid_argument("Index out of bounds.")
+			throw std::invalid_argument("Index out of bounds.");
 		return rix[x];
 	}
 

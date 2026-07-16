@@ -25,15 +25,6 @@ double generate_random_n(double mean, double variance) {
 	return distr(rng);
 }
 
-float sigmoid(const float& act) {
-	return 1.0f / (1 + std::exp(-act));
-}
-
-float sigmoid_prime(const float& act) {
-	auto sig = sigmoid(act);
-	return sig * (1 - sig);
-}
-
 // Source: https://www.learncpp.com/cpp-tutorial/timing-your-code/
 class Timer
 {
