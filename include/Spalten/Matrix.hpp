@@ -68,6 +68,12 @@ public:
 		);
 	}
 
+	/// @brief Get the total number of elements in the matrix.
+	/// @return The number of elements in the matrix.
+	size_t size() const {
+		return rows * cols;
+	}
+
 	/// @brief Generate an rXc matrix filled with zeros from the appropriate datatype.
 	/// @tparam T The datatype of the matrix elements.
 	/// @param r The number of rows in the matrix.
@@ -209,6 +215,11 @@ public:
 		return *this == transpose(*this);
 	}
 
+	/// @brief Perform an element-wise operation with another matrix.
+	/// @tparam U The datatype of the other matrix elements.
+	/// @param other The other matrix to operate with.
+	/// @param func The function to apply element-wise.
+	/// @return A new matrix containing the result of the operation.
 	template <typename U>
 	auto _element_wise(const Matrix<U>& other, auto func) const {
 		if (!dims_equal(other))
