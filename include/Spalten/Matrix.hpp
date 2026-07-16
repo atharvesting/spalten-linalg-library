@@ -140,7 +140,10 @@ public:
 	/// @param c The column index.
 	/// @return A const reference to the element at the specified position.
 	const T& operator()(size_t r, size_t c) const {
-		return rix[r * cols + c];
+		auto x = r * cols + c;
+		if (0 > x || x >= rows * cols)
+			throw std::invalid_argument("Index out of bounds.")
+		return rix[x];
 	}
 
 	/// @brief Access the element at the specified row and column for modification. Note that the matrix is stored in row-major order, so the index is calculated as r * cols + c.
@@ -149,7 +152,28 @@ public:
 	/// @param c The column index.
 	/// @return A reference to the element at the specified position.
 	T& operator()(size_t r, size_t c) {
-		return rix[r * cols + c];
+		auto x = r * cols + c;
+		if (0 > x || x >= rows * cols)
+			throw std::invalid_argument("Index out of bounds.")
+		return rix[x];
+	}
+
+	/// @brief Access the element at the specified linear index. Note that the matrix is stored in row-major order.
+	/// @param i The linear index.
+	/// @return A const reference to the element at the specified index.
+	const T& operator[](size_t i) const {
+		if (0 > i || i >= rows * cols)
+			throw std::invalid_argument("Index out of bounds.");
+		return rix[i];
+	}
+
+	/// @brief Access the element at the specified linear index for modification. Note that the matrix is stored in row-major order.
+	/// @param i The linear index.
+	/// @return A reference to the element at the specified index.
+	T& operator[](size_t i) {
+		if (0 > i || i >= rows * cols)
+			throw std::invalid_argument("Index out of bounds.");
+		return rix[i];
 	}
 
 	/// @brief Check if the dimensions of this matrix are equal to those of another matrix.
