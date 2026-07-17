@@ -241,8 +241,29 @@ public:
 	/// @return A new matrix containing the sum.
 	template <typename U>
 	auto operator+(const Matrix<U>& other) const {
-		if (!dims_equal(other))
-			throw std::invalid_argument("Dimensions of matrices must match for addition.");
+		if (!dims_equal(other)) 
+		{
+			// Broadcasting case
+			if (other.rows == rows && other.cols == 1) 
+			{
+				using ResultType = std::common_type_t<T, U>;
+				Matrix<ResultType> result(rows, cols);
+				for (size_t i = 0; i < rows; i++) 
+				{
+					std::transform(
+						std::execution::par_unseq,
+						rix.begin() + cols * i, rix.begin() + cols * (i + 1),
+						result.rix.begin() + cols * i,
+						[&other, i](T a) { return a + other[i]; }
+					);
+				}
+				return result;
+			}
+			else 
+			{
+				throw std::invalid_argument("Dimensions of matrices must match for addition.");
+			}
+		}
 		return _element_wise(other, std::plus<>());
 	}
 
@@ -292,14 +313,18 @@ public:
 		{
 			auto thread_count = std::thread::hardware_concurrency();
 			float row_thread_ratio = this->rows / thread_count;
-			int chunks = row_thread_ratio > 4 ? static_cast<int>(row_thread_ratio) : 4;
+			int rows_per_thread{};
 
+			if (row_thread_ratio > 4) rows_per_thread = static_cast<int>(std::ceil(row_thread_ratio));
+			else rows_per_thread = 4;
+			
+			thread_count = (this->rows + rows_per_thread - 1) / rows_per_thread;
 			Matrix<T> result(this->rows, other.cols);
 			std::vector<std::jthread> workers;
 
 			for (unsigned int t = 0; t < thread_count; t++) {
-				size_t start_row = t * chunks;
-				size_t end_row = std::min(start_row + chunks, this->rows);
+				size_t start_row = t * rows_per_thread;
+				size_t end_row = std::min(start_row + rows_per_thread, this->rows);
 
 				if (start_row < end_row) {
 					workers.emplace_back([&, start_row, end_row]() {
