@@ -145,7 +145,7 @@ public:
 	/// @param c The column index.
 	/// @return A const reference to the element at the specified position.
 	const T& operator()(size_t r, size_t c) const {
-		auto x = (r * cols) + c;
+		int x = static_cast<int>(r) * static_cast<int>(cols) + static_cast<int>(c);
 		if (0 > x || x >= rows * cols)
 			throw std::invalid_argument("Index out of bounds.");
 		return rix[x];
@@ -157,7 +157,7 @@ public:
 	/// @param c The column index.
 	/// @return A reference to the element at the specified position.
 	T& operator()(size_t r, size_t c) {
-		auto x = (r * cols) + c;
+		int x = static_cast<int>(r) * static_cast<int>(cols) + static_cast<int>(c);
 		if (0 > x || x >= rows * cols)
 			throw std::invalid_argument("Index out of bounds.");
 		return rix[x];
@@ -166,7 +166,7 @@ public:
 	/// @brief Access the element at the specified linear index. Note that the matrix is stored in row-major order.
 	/// @param i The linear index.
 	/// @return A const reference to the element at the specified index.
-	const T& operator[](size_t i) const {
+	const T& operator[](int i) const {
 		if (0 > i || i >= rows * cols)
 			throw std::invalid_argument("Index out of bounds.");
 		return rix[i];
@@ -175,7 +175,7 @@ public:
 	/// @brief Access the element at the specified linear index for modification. Note that the matrix is stored in row-major order.
 	/// @param i The linear index.
 	/// @return A reference to the element at the specified index.
-	T& operator[](size_t i) {
+	T& operator[](int i) {
 		if (0 > i || i >= rows * cols)
 			throw std::invalid_argument("Index out of bounds.");
 		return rix[i];
@@ -219,8 +219,8 @@ public:
 	/// @param other The other matrix to operate with.
 	/// @param func The function to apply element-wise.
 	/// @return A new matrix containing the result of the operation.
-	template <typename U>
-	auto _element_wise(const Matrix<U>& other, auto func) const {
+	template <typename U, typename Func>
+	auto _element_wise(const Matrix<U>& other, Func func) const {
 		if (!dims_equal(other))
 			throw std::invalid_argument("Matrix dimensions must match.");
 
@@ -664,7 +664,7 @@ Matrix<T> submatrix(const Matrix<T>& mat, std::set<int> exclude_rows, std::set<i
 /// @param mat The matrix for which to calculate the determinant.
 /// @return The determinant of the matrix.
 template <typename T>
-int det(const Matrix<T>& mat) {
+float det(const Matrix<T>& mat) {
 	if (mat.is_square() == 0) throw std::invalid_argument("Matrix must be a square matrix.");
 	if (mat.rows == 1) return mat(0, 0);
 	if (mat.rows == 2) return mat(0, 0) * mat(1, 1) - mat(1, 0) * mat(0, 1);
