@@ -130,7 +130,7 @@ public:
 	/// @brief Fill the matrix with random float values between [0, 1).
 	void fill_random() {
 		for (auto& num : rix) {
-			num = static_cast<double>(generate_random(0, 0, true));
+			num = static_cast<float>(generate_random(0, 0, true));
 		}
 	}
 
@@ -145,7 +145,7 @@ public:
 	/// @param c The column index.
 	/// @return A const reference to the element at the specified position.
 	const T& operator()(size_t r, size_t c) const {
-		auto x = r * cols + c;
+		auto x = (r * cols) + c;
 		if (0 > x || x >= rows * cols)
 			throw std::invalid_argument("Index out of bounds.");
 		return rix[x];
@@ -157,7 +157,7 @@ public:
 	/// @param c The column index.
 	/// @return A reference to the element at the specified position.
 	T& operator()(size_t r, size_t c) {
-		auto x = r * cols + c;
+		auto x = (r * cols) + c;
 		if (0 > x || x >= rows * cols)
 			throw std::invalid_argument("Index out of bounds.");
 		return rix[x];
@@ -236,6 +236,21 @@ public:
 		return result;
 	}
 
+	template <typename U>
+	void _element_wise_inplace(const Matrix<U>& other, auto func) {
+		if (!dims_equal(other))
+			throw std::invalid_argument("Matrix dimensions must match.");
+
+		// Choosing the datatype with higher precision
+		using ResultType = std::common_type_t<T, U>;
+
+		std::transform(std::execution::par_unseq,
+			this->rix.begin(), this->rix.end(),
+			other.rix.begin(), this->rix.begin(),
+			func
+		);
+	}
+
 	/// @brief Add another matrix to this matrix.
 	/// @param other The other matrix to add.
 	/// @return A new matrix containing the sum.
@@ -252,19 +267,23 @@ public:
 				{
 					std::transform(
 						std::execution::par_unseq,
-						rix.begin() + cols * i, rix.begin() + cols * (i + 1),
-						result.rix.begin() + cols * i,
+						rix.begin() + (cols * i), rix.begin() + (cols * (i + 1)),
+						result.rix.begin() + (cols * i),
 						[&other, i](T a) { return a + other[i]; }
 					);
 				}
 				return result;
 			}
-			else 
-			{
-				throw std::invalid_argument("Dimensions of matrices must match for addition.");
-			}
+			throw std::invalid_argument("Dimensions of matrices must match for addition.");
 		}
 		return _element_wise(other, std::plus<>());
+	}
+
+	template <typename U>
+	auto operator+=(const Matrix<U>& other) {
+		if (!dims_equal(other)) 
+			throw std::invalid_argument("Dimensions of matrices must match for addition.");
+		return _element_wise_inplace(other, std::plus<>());
 	}
 
 	/// @brief Subtract another matrix from this matrix.
@@ -275,6 +294,12 @@ public:
 		if (!dims_equal(other))
 			throw std::invalid_argument("Dimensions of matrices must match for subtraction.");
 		return _element_wise(other, std::minus<>());
+	}
+
+	auto operator-=(const Matrix<T>& other) {
+		if (!dims_equal(other))
+			throw std::invalid_argument("Dimensions of matrices must match for subtraction.");
+		return _element_wise_inplace(other, std::minus<>());
 	}
 
 	/// @brief Calculate the Hadamard product (element-wise multiplication) of this matrix with another matrix.
@@ -311,18 +336,18 @@ public:
 		}
 		else
 		{
-			auto thread_count = std::thread::hardware_concurrency();
+			size_t thread_count = std::thread::hardware_concurrency();
 			float row_thread_ratio = this->rows / thread_count;
-			int rows_per_thread{};
+			size_t rows_per_thread{};
 
-			if (row_thread_ratio > 4) rows_per_thread = static_cast<int>(std::ceil(row_thread_ratio));
+			if (row_thread_ratio > 4) rows_per_thread = static_cast<size_t>(std::ceil(row_thread_ratio));
 			else rows_per_thread = 4;
 			
 			thread_count = (this->rows + rows_per_thread - 1) / rows_per_thread;
 			Matrix<T> result(this->rows, other.cols);
 			std::vector<std::jthread> workers;
 
-			for (unsigned int t = 0; t < thread_count; t++) {
+			for (size_t t = 0; t < thread_count; t++) {
 				size_t start_row = t * rows_per_thread;
 				size_t end_row = std::min(start_row + rows_per_thread, this->rows);
 
@@ -469,7 +494,7 @@ struct LU {
 			throw std::invalid_argument("Mismatch between specified square dimension and input matrix dimensions.");
 	}
 
-	void print() {
+	void print() const {
 		std::cout << "L ";
 		printMatrix(L);
 		std::cout << "U ";
@@ -492,7 +517,7 @@ LU LU_decomp(const Matrix<T>& mat) {
 	for (size_t p = 0; p < mat.cols - 1; p++)
 	{
 		float pivot = lu.U(p, p);
-		if (pivot == 0.0f)
+		if (pivot == 0.0F)
 			throw std::runtime_error("Zero pivot error.");
 
 		// For each row in U under Pivot
@@ -528,7 +553,7 @@ Vector<float> fwd_substitution(const Matrix<T>& L, const Vector<U>& b) {
 	Vector<float> y(L.rows);
 
 	for (int i = 0; i < L.rows; i++) {
-		float sum = 0.0f;
+		float sum = 0.0F;
 
 		for (int j = 0; j < i; j++) {
 			sum += y(j) * L(i, j);
@@ -537,7 +562,6 @@ Vector<float> fwd_substitution(const Matrix<T>& L, const Vector<U>& b) {
 	}
 	return y;
 }
-
 
 /// @brief Calculate the product of all diagonal elements
 /// @tparam T The datatype of the matrix
@@ -572,7 +596,7 @@ Vector<float> bwd_substitution(const Matrix<T>& U, const Vector<U_type>& y) {
 	Vector<float> x(U.rows);
 
 	for (int row = U.rows - 1; row >= 0; row--) {
-		float sum = 0.0f;
+		float sum = 0.0F;
 
 		for (int col = row + 1; col < U.cols; col++) {
 			sum += U(row, col) * x(col);
