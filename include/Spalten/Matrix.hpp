@@ -11,37 +11,10 @@
 #include <iomanip>        // setprecision
 #include <set>            // set
 #include <string>		  // to_string
-
 #include "Utils.hpp"
 #include "Vector.hpp"
 
 size_t constexpr POLICY_THRESHOLD = 10'000;
-
-[[noreturn]] inline void throw_invalid_dimensions(int r, int c) {
-	throw std::invalid_argument(
-		"Rows and Columns must be positive integers. Provided: " + 
-		std::to_string(r) + "x" + std::to_string(c)
-	);
-}
-
-inline void validate_dimensions(int r, int c) {
-	if (r <= 0 || c <= 0) [[unlikely]] {
-		throw_invalid_dimensions(r, c);
-	}
-}
-
-[[noreturn]] inline void throw_incompatible_dimensions(int r1, int c1, int r2, int c2) {
-	throw std::invalid_argument(
-		"Rows and columns of the two matrices must match. Provided: " +
-		std::to_string(r1) + "x" + std::to_string(c1) + " and " + std::to_string(r2) + "x" + std::to_string(c2)
-	);
-}
-
-inline void validate_dim_compatibility(int r1, int c1, int r2, int c2) {
-	if (r1 != r2 || c1 != c2) [[unlikely]] {
-		throw_incompatible_dimensions(r1, c1, r2, c2);
-	}
-}
 
 template <typename Func>
 inline void dispatch_policy(size_t size, Func&& func) {
