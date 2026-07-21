@@ -32,7 +32,7 @@ int main() {
 
     // Numerical decomposition
     struct LU lu = lu_decomp(A);
-    // Struct accessed using LU.L and LU.U
+    // Struct accessed using lu.L and lu.U
 
     std::cout << "Determinant: " << det << "\n";
     return 0;
