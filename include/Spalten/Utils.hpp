@@ -4,25 +4,25 @@
 //#include <sstream>       // ostringstream
 #include <chrono>        // steady_clock, duration, time_point, duration_cast
 
-inline double generate_random(int low, int high, bool zero2one) {
+inline float generate_random(int low, int high, bool zero2one) {
 	static std::random_device rd;
 	static std::mt19937 rng(rd());
 	if (zero2one) {
 		std::uniform_real_distribution<double> distr(0.0, 1.0);
-		return distr(rng);
+		return static_cast<float>(distr(rng));
 	}
 	else {
 		std::uniform_int_distribution<> distr(low, high);
-		return distr(rng);
+		return static_cast<float>(distr(rng));
 	}
 }
 
 // https://en.cppreference.com/cpp/numeric/random/normal_distribution
-inline double generate_random_n(double mean, double variance) {
+inline float generate_random_n(double mean, double variance) {
 	static std::random_device rd;
 	static std::mt19937 rng(rd());
 	std::normal_distribution<double> distr{ mean, variance };
-	return distr(rng);
+	return static_cast<float>(distr(rng));
 }
 
 // Source: https://www.learncpp.com/cpp-tutorial/timing-your-code/

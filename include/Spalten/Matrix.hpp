@@ -14,6 +14,34 @@
 #include "Utils.hpp"
 #include "Vector.hpp"
 
+size_t constexpr POLICY_THRESHOLD = 10'000;
+
+[[noreturn]] inline void throw_invalid_dimensions(int r, int c) {
+	throw std::invalid_argument(
+		"Rows and Columns must be positive integers. Provided: " + 
+		std::to_string(r) + "x" + std::to_string(c)
+	);
+}
+
+inline void validate_dimensions(int r, int c) {
+	if (r <= 0 || c <= 0) [[unlikely]] {
+		throw_invalid_dimensions(r, c);
+	}
+}
+
+[[noreturn]] inline void throw_incompatible_dimensions(int r1, int c1, int r2, int c2) {
+	throw std::invalid_argument(
+		"Rows and columns of the two matrices must match. Provided: " +
+		std::to_string(r1) + "x" + std::to_string(c1) + " and " + std::to_string(r2) + "x" + std::to_string(c2)
+	);
+}
+
+inline void validate_dim_compatibility(int r1, int c1, int r2, int c2) {
+	if (r1 != r2 || c1 != c2) [[unlikely]] {
+		throw_incompatible_dimensions(r1, c1, r2, c2);
+	}
+}
+
 /// @brief A class representing a matrix.
 /// @tparam T The datatype of the matrix elements.
 template <typename T>
@@ -26,41 +54,50 @@ public:
 	/// @brief Construct a matrix with the specified dimensions. Filled with default values of the specified datatype.
 	/// @param r The number of rows.
 	/// @param c The number of columns.
-	Matrix(size_t r, size_t c)
-		: rows(r), cols(c), rix(r* c, T{}) {
+	Matrix(int r, int c) {
+			validate_dimensions(r, c);
+			rows = r; cols = c;
+			rix = std::vector<T>(r * c, T{});
 	}
 
 	/// @brief Construct a square matrix with the specified dimension. Filled with default values of the specified datatype.
 	/// @param dim The dimension of the square matrix.
-	Matrix(size_t dim)
-		: rows(dim), cols(dim), rix(dim* dim, T{}) {
+	Matrix(int dim) {
+		validate_dimensions(dim, dim);
+		rows = dim; cols = dim;
+		rix = std::vector<T>(dim * dim, T{});
 	}
 
 	/// @brief Construct a matrix with the specified dimensions and fill value.
 	/// @param r The number of rows.
 	/// @param c The number of columns.
 	/// @param fill The value to fill the matrix with.
-	Matrix(size_t r, size_t c, const T& fill)
-		: rows(r), cols(c), rix(r* c, fill) {
+	Matrix(int r, int c, const T& fill) {
+		validate_dimensions(r, c);
+		rows = r; cols = c;
+		rix = std::vector<T>(r * c, fill);
 	}
 
 	/// @brief Construct a matrix with the specified dimensions and a list of values.
 	/// @param r The number of rows.
 	/// @param c The number of columns.
 	/// @param nums The list of values to initialize the matrix with.
-	Matrix(size_t r, size_t c, std::vector<T>&& nums)
-		: rows(r), cols(c), rix(std::move(nums)) {
-		if (rix.size() != rows * cols)
+	Matrix(int r, int c, std::vector<T>&& nums) {
+		validate_dimensions(r, c);
+		if (nums.size() != r * c)
 			throw std::invalid_argument("Inexact amount of numbers provided.");
+		rows = r; cols = c;
+		rix = std::move(nums);
 	}
 
 	/// @brief Conversion constructor
 	/// @tparam U The datatype of the argument matrix
 	/// @param other The matrix to be converted to desired datatype
 	template <typename U>
-	Matrix(const Matrix<U>& other) : rows(other.rows), cols(other.cols), rix(other.rows* other.cols, T{}) {
+	Matrix(const Matrix<U>& other) : rows(other.rows), cols(other.cols), rix(other.rows * other.cols, T{}) {
+		auto exec_policy = rows * cols < POLICY_THRESHOLD ? std::execution::seq : std::execution::par_unseq;
 		std::transform(
-			std::execution::par_unseq,
+			exec_policy,
 			other.rix.begin(), other.rix.end(),
 			this->rix.begin(),
 			[](const U& val) { return static_cast<T>(val); }
@@ -78,15 +115,17 @@ public:
 	/// @param r The number of rows in the matrix.
 	/// @param c The number of columns in the matrix.
 	/// @return A matrix filled with zeros.
-	static Matrix<T> zeros(size_t r, size_t c) {
-		return Matrix<T>(r, c, T{ 0 });
+	static Matrix<T> zeros(int rows, int cols) {
+		validate_dimensions(rows, cols);
+		return Matrix<T>(rows, cols, T{ 0 });
 	}
 
 	/// @brief Generate an nXn matrix filled with zeros from the appropriate datatype.
 	/// @tparam T The datatype of the matrix elements
 	/// @param dim The square dimension of the matrix.
 	/// @return An nXn matrix filled with zeros
-	static Matrix<T> zeros(size_t dim) {
+	static Matrix<T> zeros(int dim) {
+		validate_dimensions(dim, dim);
 		return Matrix<T>(dim, dim, T{ 0 });
 	}
 
@@ -95,24 +134,27 @@ public:
 	/// @param r The number of rows in the matrix.
 	/// @param c The number of columns in the matrix.
 	/// @return A matrix filled with ones.
-	static Matrix<T> ones(const size_t& r, const size_t& c) {
-		return Matrix<T>(r, c, T{ 1 });
+	static Matrix<T> ones(const int& rows, const int& cols) {
+		validate_dimensions(rows, cols);
+		return Matrix<T>(rows, cols, T{ 1 });
 	}
 
 	/// @brief Generate an nXn identity matrix.
 	/// @tparam T The datatype of the matrix elements.
 	/// @param dim The dimension of the identity matrix.
 	/// @return An identity matrix of the specified dimension.
-	static Matrix<T> identity(const size_t& dim) {
-		auto id = Matrix<T>::zeros(dim, dim);
+	static Matrix<T> identity(const int& dim) {
+		validate_dimensions(dim, dim);
+		auto idt = Matrix<T>::zeros(dim, dim);
 		for (int i = 0; i < dim; i++)
-			id(i, i) = T{ 1 };
-		return id;
+			idt(i, i) = T{ 1 };
+		return idt;
 	}
 
 	/// @brief Fill the matrix with zeros.
 	void fill_zeros() {
-		std::fill(std::execution::par_unseq,
+		auto exec_policy = rows * cols < POLICY_THRESHOLD ? std::execution::seq : std::execution::par_unseq;
+		std::fill(exec_policy,
 			rix.begin(), rix.end(),
 			static_cast<T>(0)
 		);
@@ -136,7 +178,8 @@ public:
 
 	/// @brief Fill the matrix with ones.
 	void fill_ones() {
-		std::fill(rix.begin(), rix.end(), static_cast<T>(1));
+		auto exec_policy = rows * cols < POLICY_THRESHOLD ? std::execution::seq : std::execution::par_unseq;
+		std::fill(exec_policy, rix.begin(), rix.end(), static_cast<T>(1));
 	}
 
 	/// @brief Access the element at the specified row and column. Note that the matrix is stored in row-major order, so the index is calculated as r * cols + c.
@@ -144,11 +187,10 @@ public:
 	/// @param r The row index.
 	/// @param c The column index.
 	/// @return A const reference to the element at the specified position.
-	const T& operator()(size_t r, size_t c) const {
-		int x = static_cast<int>(r) * static_cast<int>(cols) + static_cast<int>(c);
-		if (0 > x || x >= rows * cols)
-			throw std::invalid_argument("Index out of bounds.");
-		return rix[x];
+	const T& operator()(int row, int col) const {
+		if (row < 0 || row >= static_cast<int>(rows) || col < 0 || col >= static_cast<int>(cols))
+			throw std::out_of_range("Index out of bounds.");
+		return rix[(row * cols) + col];
 	}
 
 	/// @brief Access the element at the specified row and column for modification. Note that the matrix is stored in row-major order, so the index is calculated as r * cols + c.
@@ -156,29 +198,37 @@ public:
 	/// @param r The row index.
 	/// @param c The column index.
 	/// @return A reference to the element at the specified position.
-	T& operator()(size_t r, size_t c) {
-		int x = static_cast<int>(r) * static_cast<int>(cols) + static_cast<int>(c);
-		if (0 > x || x >= rows * cols)
-			throw std::invalid_argument("Index out of bounds.");
-		return rix[x];
+	T& operator()(int row, int col) {
+		if (row < 0 || row >= static_cast<int>(rows) || col < 0 || col >= static_cast<int>(cols))
+			throw std::out_of_range("Index out of bounds.");
+		return rix[(row * cols) + col];
 	}
 
 	/// @brief Access the element at the specified linear index. Note that the matrix is stored in row-major order.
 	/// @param i The linear index.
 	/// @return A const reference to the element at the specified index.
-	const T& operator[](int i) const {
-		if (0 > i || i >= rows * cols)
-			throw std::invalid_argument("Index out of bounds.");
-		return rix[i];
+	const T& operator[](int idx) const {
+		if (0 > idx || idx >= rows * cols)
+			throw std::out_of_range("Index out of bounds.");
+		return rix[idx];
 	}
 
 	/// @brief Access the element at the specified linear index for modification. Note that the matrix is stored in row-major order.
 	/// @param i The linear index.
 	/// @return A reference to the element at the specified index.
-	T& operator[](int i) {
-		if (0 > i || i >= rows * cols)
-			throw std::invalid_argument("Index out of bounds.");
-		return rix[i];
+	T& operator[](int idx) {
+		if (0 > idx || idx >= rows * cols)
+			throw std::out_of_range("Index out of bounds.");
+		return rix[idx];
+	}
+
+	/// @brief Access the element at the specified linear index for modification. Note that the matrix is stored in row-major order.
+	/// @param i The linear index.
+	/// @return A reference to the element at the specified index.
+	T& operator[](int idx) {
+		if (0 > idx || idx >= rows * cols)
+			throw std::out_of_range("Index out of bounds.");
+		return rix[idx];
 	}
 
 	/// @brief Check if the dimensions of this matrix are equal to those of another matrix.
@@ -195,7 +245,8 @@ public:
 	bool operator==(const Matrix<T>& other) const {
 		if (!dims_equal(other))
 			return false;
-		return std::equal(this->rix.begin(), this->rix.end(), other.rix.begin());
+		auto exec_policy = rows * cols < POLICY_THRESHOLD ? std::execution::seq : std::execution::par_unseq;
+		return std::equal(exec_policy, this->rix.begin(), this->rix.end(), other.rix.begin());
 	}
 
 	/// @brief Check if the matrix is square.
@@ -221,14 +272,13 @@ public:
 	/// @return A new matrix containing the result of the operation.
 	template <typename U, typename Func>
 	auto _element_wise(const Matrix<U>& other, Func func) const {
-		if (!dims_equal(other))
-			throw std::invalid_argument("Matrix dimensions must match.");
+		validate_dim_compatibility(this->rows, this->cols, other.rows, other.cols);
 
-		// Choosing the datatype with higher precision
 		using ResultType = std::common_type_t<T, U>;
 		Matrix<ResultType> result(this->rows, this->cols);
 
-		std::transform(std::execution::par_unseq,
+		auto exec_policy = rows * cols < POLICY_THRESHOLD ? std::execution::seq : std::execution::par_unseq;
+		std::transform(exec_policy,
 			this->rix.begin(), this->rix.end(),
 			other.rix.begin(), result.rix.begin(),
 			func
@@ -238,13 +288,10 @@ public:
 
 	template <typename U>
 	void _element_wise_inplace(const Matrix<U>& other, auto func) {
-		if (!dims_equal(other))
-			throw std::invalid_argument("Matrix dimensions must match.");
+		validate_dim_compatibility(this->rows, this->cols, other.rows, other.cols);
 
-		// Choosing the datatype with higher precision
-		using ResultType = std::common_type_t<T, U>;
-
-		std::transform(std::execution::par_unseq,
+		auto exec_policy = rows * cols < POLICY_THRESHOLD ? std::execution::seq : std::execution::par_unseq;
+		std::transform(exec_policy,
 			this->rix.begin(), this->rix.end(),
 			other.rix.begin(), this->rix.begin(),
 			func
@@ -266,7 +313,7 @@ public:
 				for (size_t i = 0; i < rows; i++) 
 				{
 					std::transform(
-						std::execution::par_unseq,
+						exec_policy,
 						rix.begin() + (cols * i), rix.begin() + (cols * (i + 1)),
 						result.rix.begin() + (cols * i),
 						[&other, i](T a) { return a + other[i]; }
@@ -281,8 +328,7 @@ public:
 
 	template <typename U>
 	auto operator+=(const Matrix<U>& other) {
-		if (!dims_equal(other)) 
-			throw std::invalid_argument("Dimensions of matrices must match for addition.");
+		validate_dim_compatibility(this->rows, this->cols, other.rows, other.cols);
 		return _element_wise_inplace(other, std::plus<>());
 	}
 
@@ -291,14 +337,12 @@ public:
 	/// @return A new matrix containing the difference.
 	template <typename U>
 	auto operator-(const Matrix<U>& other) const {
-		if (!dims_equal(other))
-			throw std::invalid_argument("Dimensions of matrices must match for subtraction.");
+		validate_dim_compatibility(this->rows, this->cols, other.rows, other.cols);
 		return _element_wise(other, std::minus<>());
 	}
 
 	auto operator-=(const Matrix<T>& other) {
-		if (!dims_equal(other))
-			throw std::invalid_argument("Dimensions of matrices must match for subtraction.");
+		validate_dim_compatibility(this->rows, this->cols, other.rows, other.cols);
 		return _element_wise_inplace(other, std::minus<>());
 	}
 
@@ -308,8 +352,7 @@ public:
 	/// @return A new matrix containing the Hadamard product.
 	template <typename U>
 	auto hadamard(const Matrix<U>& other) const {
-		if (!dims_equal(other))
-			throw std::invalid_argument("Matrix dimensions must match.");
+		validate_dim_compatibility(this->rows, this->cols, other.rows, other.cols);
 		return _element_wise(other, std::multiplies<>());
 	}
 
@@ -319,8 +362,7 @@ public:
 	/// @return A new matrix containing the product.
 	template <typename U>
 	Matrix<T> operator*(const Matrix<U>& other) const {
-		if (this->cols != other.rows)
-			throw std::invalid_argument("Column count of first and Row count of second must match for matrix multiplication.");
+		validate_dim_compatibility(this->cols, 1, other.rows, 1); // Only r1 and c2 need to match for matrix multiplication
 
 		if (this->rows * this->cols * other.rows < 4'000'000)
 		{
@@ -372,9 +414,8 @@ public:
 	/// @brief Copy the elements of another matrix into this matrix if their dimensions match.
 	/// @param other The other matrix to copy from.
 	void copy(Matrix<T>& other) {
-		if (this->rows == other.rows && this->cols == other.cols) {
-			this->rix = other.rix;
-		}
+		validate_dim_compatibility(this->rows, this->cols, other.rows, other.cols);
+		this->rix = other.rix;
 	}
 
 	/// @brief Multiply the matrix by a scalar value.
@@ -382,7 +423,8 @@ public:
 	/// @return A new matrix containing the product.
 	Matrix<float> operator*(const float scalar) const {
 		Matrix<float> result(this->rows, this->cols);
-		std::transform(std::execution::par_unseq,
+		auto exec_policy = rows * cols < POLICY_THRESHOLD ? std::execution::seq : std::execution::par_unseq;
+		std::transform(exec_policy,
 			this->rix.begin(), this->rix.end(),
 			result.rix.begin(), [scalar](T val) { return val * scalar; }
 		);
@@ -402,12 +444,12 @@ public:
 /// @param mat The matrix to print.
 template <typename T>
 void printMatrix(const Matrix<T>& mat) {
-	std::cout << std::endl << mat.rows << "x" << mat.cols << std::endl;
+	std::cout << "\n" << mat.rows << "x" << mat.cols << "\n";
 	for (int i = 0; i < mat.rows; i++) {
 		for (int j = 0; j < mat.cols; j++) {
 			std::cout << std::fixed << std::setprecision(4) << mat(i, j) << "  ";
 		}
-		std::cout << std::endl;
+		std::cout << "\n";
 	}
 }
 
@@ -415,7 +457,8 @@ void printMatrix(const Matrix<T>& mat) {
 /// @param r The number of rows in the matrix.
 /// @param c The number of columns in the matrix.
 /// @return A matrix filled with random float values.
-inline Matrix<float> mat_random_uniform(size_t r, size_t c) {
+inline Matrix<float> mat_random_uniform(int r, int c) {
+	validate_dimensions(r, c);
 	Matrix<float> mat(r, c);
 	for (auto& num : mat.rix) {
 		num = static_cast<float>(generate_random(0, 0, true));
@@ -430,6 +473,7 @@ inline Matrix<float> mat_random_uniform(size_t r, size_t c) {
 /// @param variance The variance of the normal distribution.
 /// @return A matrix filled with random float values from the normal distribution.
 inline Matrix<float> mat_random_normal(size_t r, size_t c, float mean = 0, float variance = 1) {
+	validate_dimensions(r, c);
 	Matrix<float> mat(r, c);
 	for (auto& num : mat.rix) {
 		num = generate_random_n(mean, variance);
@@ -445,6 +489,7 @@ inline Matrix<float> mat_random_normal(size_t r, size_t c, float mean = 0, float
 /// @param stop The upper bound of the random value range.
 /// @return A matrix filled with random integer values.
 inline Matrix<int> mat_random_int_range(size_t r, size_t c, int start, int stop) {
+	validate_dimensions(r, c);
 	if (start > stop)
 		throw std::invalid_argument("Start must be greater than Stop");
 	Matrix<int> mat(r, c);
@@ -460,6 +505,7 @@ inline Matrix<int> mat_random_int_range(size_t r, size_t c, int start, int stop)
 /// @return The trace of the matrix.
 template <typename T>
 T trace(const Matrix<T>& mat) {
+	validate_dimensions(mat.rows, mat.cols);
 	if (mat.is_square() == 0) throw std::invalid_argument("Matrix must be a square matrix.");
 	T total{ 0 };
 	for (int i = 0; i < mat.rows; i++) {
@@ -474,6 +520,7 @@ T trace(const Matrix<T>& mat) {
 /// @return The transposed matrix.
 template <typename T>
 Matrix<T> transpose(const Matrix<T>& mat) {
+	validate_dimensions(mat.rows, mat.cols);
 	Matrix<T> result(mat.cols, mat.rows);
 	for (int c = 0; c < result.cols; c++) {
 		for (int r = 0; r < result.rows; r++) {
@@ -489,16 +536,12 @@ struct LU {
 	Matrix<float> U;
 
 	template <typename T>
-	LU(Matrix<T> og, size_t dim) : L(Matrix<float>::identity(dim)), U(og) {
-		if (og.rows != dim || og.cols != dim)
-			throw std::invalid_argument("Mismatch between specified square dimension and input matrix dimensions.");
-	}
-
-	void print() const {
-		std::cout << "L ";
-		printMatrix(L);
-		std::cout << "U ";
-		printMatrix(U);
+	LU(Matrix<T> og) {
+		validate_dimensions(og.rows, og.cols);
+		if (og.is_square() == 0)
+			throw std::invalid_argument("Matrix must be a square matrix.");
+		L = Matrix<float>::identity(og.rows);
+		U = Matrix<float>(og);
 	}
 };
 
@@ -511,7 +554,7 @@ LU LU_decomp(const Matrix<T>& mat) {
 	if (mat.is_square() == 0)
 		throw std::invalid_argument("Matrix must be a square matrix.");
 
-	LU lu(mat, mat.rows);
+	LU lu(mat);
 
 	// For each pivot element in U
 	for (size_t p = 0; p < mat.cols - 1; p++)
@@ -544,8 +587,8 @@ LU LU_decomp(const Matrix<T>& mat) {
 /// @return The solution vector y.
 template <typename T, typename U>
 Vector<float> fwd_substitution(const Matrix<T>& L, const Vector<U>& b) {
-	if (L.rows != b.dim)
-		throw std::invalid_argument("Matrix and Vector dimensions must be compatible.");
+	// Initial check only makes sure that the number of rows in L matches the dimension of b, since L is lower triangular and b is a vector.
+	validate_dim_compatibility(L.rows, 1, b.dim, 1); 
 
 	if (L.is_square() == 0)
 		throw std::invalid_argument("Insufficient data to solve simultaneous equations.");
@@ -587,9 +630,10 @@ T diag_prod(const Matrix<T>& mat) {
 /// @return The solution vector x.
 template <typename T, typename U_type>
 Vector<float> bwd_substitution(const Matrix<T>& U, const Vector<U_type>& y) {
-	if (U.rows != y.dim)
-		throw std::invalid_argument("Matrix and Vector dimensions must be compatible.");
-
+	// Initial check only makes sure that the number of rows in U matches the dimension of y, since U is upper triangular and y is a vector.
+	validate_dimensions(U.rows, U.cols);
+	validate_dimensions(y.dim, 1);
+	validate_dim_compatibility(U.rows, 1, y.dim, 1); 
 	if (U.is_square() == 0)
 		throw std::invalid_argument("Insufficient data to solve simultaneous equations.");
 
@@ -615,6 +659,7 @@ Vector<float> bwd_substitution(const Matrix<T>& U, const Vector<U_type>& y) {
 /// @return The resulting submatrix.
 template <typename T>
 Matrix<T> submatrix(const Matrix<T>& mat, int exclude_row, int exclude_col) {
+	validate_dimensions(mat.rows, mat.cols);
 	Matrix<T> result(mat.rows - 1, mat.cols - 1);
 	result.rix.clear();
 
@@ -638,7 +683,7 @@ Matrix<T> submatrix(const Matrix<T>& mat, int exclude_row, int exclude_col) {
 /// @return The resulting submatrix.
 template <typename T>
 Matrix<T> submatrix(const Matrix<T>& mat, std::set<int> exclude_rows, std::set<int> exclude_cols) {
-
+	validate_dimensions(mat.rows, mat.cols);
 	if (exclude_rows.size() > mat.rows || exclude_cols.size() > mat.cols)
 		throw std::invalid_argument("Exclusion set size exceeded matrix dimensions.");
 
@@ -665,12 +710,13 @@ Matrix<T> submatrix(const Matrix<T>& mat, std::set<int> exclude_rows, std::set<i
 /// @return The determinant of the matrix.
 template <typename T>
 float det(const Matrix<T>& mat) {
+	validate_dimensions(mat.rows, mat.cols);
 	if (mat.is_square() == 0) throw std::invalid_argument("Matrix must be a square matrix.");
 	if (mat.rows == 1) return mat(0, 0);
-	if (mat.rows == 2) return mat(0, 0) * mat(1, 1) - mat(1, 0) * mat(0, 1);
+	if (mat.rows == 2) return (mat(0, 0) * mat(1, 1)) - (mat(1, 0) * mat(0, 1));
 
 	if (mat.rows < 5) {
-		int result = 0;
+		float result = 0;
 		Matrix<T> tmp(mat.rows - 1, mat.cols - 1);
 
 		for (int i = 0; i < mat.cols; i++)
@@ -683,7 +729,6 @@ float det(const Matrix<T>& mat) {
 	else {
 		auto lu = LU_decomp(mat);
 		return diag_prod(lu.U);
-
 	}
 }
 
@@ -695,6 +740,7 @@ float det(const Matrix<T>& mat) {
 /// @return The cofactor matrix.
 template <typename T>
 Matrix<T> cofactor(const Matrix<T>& mat) {
+	validate_dimensions(mat.rows, mat.cols);
 	if (mat.is_square() == 0) 
 		throw std::invalid_argument("Matrix must be a square matrix.");
 
@@ -721,6 +767,7 @@ Matrix<T> cofactor(const Matrix<T>& mat) {
 /// @return The adjugate of the matrix.
 template <typename T>
 Matrix<T> adj(const Matrix<T>& mat) {
+	validate_dimensions(mat.rows, mat.cols);
 	auto cof = cofactor(mat);
 	return transpose(cof);
 }
@@ -774,6 +821,7 @@ Matrix<T> vecs_to_mat(std::vector<Vector<T>> vecs) {
 /// @return The inverse of the matrix.
 template <typename T>
 Matrix<float> inv(const Matrix<T>& mat) {
+	validate_dimensions(mat.rows, mat.cols);
 	if (mat.is_square() == 0)
 		throw std::invalid_argument("Matrix must be a square matrix.");
 
@@ -816,6 +864,7 @@ Matrix<float> inv(const Matrix<T>& mat) {
 /// @return The matrix with orthonormal columns.
 template <typename T>
 Matrix<float> gram_schmidt_mat(const Matrix<T>& mat) {
+	validate_dimensions(mat.rows, mat.cols);
 	std::vector<Vector<T>> vees = mat_to_vecs(mat);
 	auto ortho_basis = Vector<T>::gram_schmidt(vees);
 	return vecs_to_mat(ortho_basis);
@@ -827,6 +876,7 @@ Matrix<float> gram_schmidt_mat(const Matrix<T>& mat) {
 /// @return A pair containing the Q and R matrices.
 template <typename T>
 std::pair<Matrix<float>, Matrix<float>> qr_decomp(const Matrix<T>& A) {
+	validate_dimensions(A.rows, A.cols);
 	auto Q = gram_schmidt_mat(A);
 	auto R = (-Q) * A;
 	for (size_t row = 0; row < R.rows; row++)
@@ -844,6 +894,7 @@ std::pair<Matrix<float>, Matrix<float>> qr_decomp(const Matrix<T>& A) {
 /// @return True if the columns are linearly independent, false otherwise.
 template <typename T>
 bool is_lin_independent(const Matrix<T>& mat) {
-	return det(mat);
+	// det function checks for dimension validity.
+	return det(mat) != 0;
 }
 

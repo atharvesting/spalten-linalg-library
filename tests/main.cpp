@@ -1,11 +1,11 @@
-#pragma once
-#include <Spalten/Matrix.hpp>
-#include <Spalten/Vector.hpp>
-#include <Spalten/Utils.hpp>
 #include <iostream>
 #include <vector>
 #include <cmath>
 #include <thread>
+
+#include <Spalten/Matrix.hpp>
+#include <Spalten/Vector.hpp>
+#include <Spalten/Utils.hpp>
 
 int main() {
 

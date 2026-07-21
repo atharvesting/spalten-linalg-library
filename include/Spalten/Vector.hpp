@@ -44,8 +44,8 @@ public:
 		: dim(dim), vec(dim, T{ val }) {
 	}
 
-	using iterator = typename std::vector<T>::iterator;
-	using const_iterator = typename std::vector<T>::const_iterator;
+	using iterator = std::vector<T>::iterator;
+	using const_iterator = std::vector<T>::const_iterator;
 
 	/// @brief Get an iterator to the beginning of the vector.
 	/// @return An iterator to the beginning of the vector.
@@ -246,7 +246,7 @@ float magnitude(const std::vector<T>& arr) {
 		arr.begin(),
 		arr.end(),
 		T{ 0 },
-		[](T total, T num) { return total + num * num; }
+		[](T total, T num) { return total + (num * num); }
 	);
 	return static_cast<float>(std::sqrt(square_sum));
 }
@@ -317,5 +317,5 @@ void printVec(const Vector<T> vector) {
 	for (size_t i = 0; i < vector.dim; i++) {
 		std::cout << vector(i) << "\n";
 	}
-	std::cout << std::endl;
+	std::cout << "\n";
 }
