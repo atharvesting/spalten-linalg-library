@@ -10,6 +10,7 @@
 #include <cmath>          // pow
 #include <iomanip>        // setprecision
 #include <set>            // set
+#include <string>		  // to_string
 
 #include "Utils.hpp"
 #include "Vector.hpp"
@@ -39,6 +40,15 @@ inline void validate_dimensions(int r, int c) {
 inline void validate_dim_compatibility(int r1, int c1, int r2, int c2) {
 	if (r1 != r2 || c1 != c2) [[unlikely]] {
 		throw_incompatible_dimensions(r1, c1, r2, c2);
+	}
+}
+
+template <typename Func>
+inline void dispatch_policy(size_t size, Func&& func) {
+	if (size < POLICY_THRESHOLD) {
+		std::forward<Func>(func)(std::execution::seq);
+	} else {
+		std::forward<Func>(func)(std::execution::par_unseq);
 	}
 }
 
@@ -95,13 +105,14 @@ public:
 	/// @param other The matrix to be converted to desired datatype
 	template <typename U>
 	Matrix(const Matrix<U>& other) : rows(other.rows), cols(other.cols), rix(other.rows * other.cols, T{}) {
-		auto exec_policy = rows * cols < POLICY_THRESHOLD ? std::execution::seq : std::execution::par_unseq;
-		std::transform(
-			exec_policy,
-			other.rix.begin(), other.rix.end(),
-			this->rix.begin(),
-			[](const U& val) { return static_cast<T>(val); }
-		);
+		dispatch_policy(rows * cols, [this, &other](auto exec_policy) {
+			std::transform(
+				exec_policy,
+				other.rix.begin(), other.rix.end(),
+				this->rix.begin(),
+				[](const U& val) { return static_cast<T>(val); }
+			);
+		});
 	}
 
 	/// @brief Get the total number of elements in the matrix.
@@ -153,11 +164,12 @@ public:
 
 	/// @brief Fill the matrix with zeros.
 	void fill_zeros() {
-		auto exec_policy = rows * cols < POLICY_THRESHOLD ? std::execution::seq : std::execution::par_unseq;
-		std::fill(exec_policy,
-			rix.begin(), rix.end(),
-			static_cast<T>(0)
-		);
+		dispatch_policy(rows * cols, [this](auto exec_policy) {
+			std::fill(exec_policy,
+				rix.begin(), rix.end(),
+				static_cast<T>(0)
+			);
+		});
 	}
 
 	/// @brief Fill the matrix with random integer values based on specified range[start, stop).
@@ -172,14 +184,15 @@ public:
 	/// @brief Fill the matrix with random float values between [0, 1).
 	void fill_random() {
 		for (auto& num : rix) {
-			num = static_cast<float>(generate_random(0, 0, true));
+			num = generate_random(0, 0, true);
 		}
 	}
 
 	/// @brief Fill the matrix with ones.
 	void fill_ones() {
-		auto exec_policy = rows * cols < POLICY_THRESHOLD ? std::execution::seq : std::execution::par_unseq;
-		std::fill(exec_policy, rix.begin(), rix.end(), static_cast<T>(1));
+		dispatch_policy(rows * cols, [this](auto exec_policy) {
+			std::fill(exec_policy, rix.begin(), rix.end(), static_cast<T>(1));
+		});
 	}
 
 	/// @brief Access the element at the specified row and column. Note that the matrix is stored in row-major order, so the index is calculated as r * cols + c.
@@ -222,15 +235,6 @@ public:
 		return rix[idx];
 	}
 
-	/// @brief Access the element at the specified linear index for modification. Note that the matrix is stored in row-major order.
-	/// @param i The linear index.
-	/// @return A reference to the element at the specified index.
-	T& operator[](int idx) {
-		if (0 > idx || idx >= rows * cols)
-			throw std::out_of_range("Index out of bounds.");
-		return rix[idx];
-	}
-
 	/// @brief Check if the dimensions of this matrix are equal to those of another matrix.
 	/// @param other The other matrix to compare with.
 	/// @return True if the dimensions are equal, false otherwise.
@@ -245,8 +249,9 @@ public:
 	bool operator==(const Matrix<T>& other) const {
 		if (!dims_equal(other))
 			return false;
-		auto exec_policy = rows * cols < POLICY_THRESHOLD ? std::execution::seq : std::execution::par_unseq;
-		return std::equal(exec_policy, this->rix.begin(), this->rix.end(), other.rix.begin());
+		dispatch_policy(rows * cols, [this, &other](auto exec_policy) {
+			return std::equal(exec_policy, this->rix.begin(), this->rix.end(), other.rix.begin());
+		});
 	}
 
 	/// @brief Check if the matrix is square.
@@ -277,25 +282,27 @@ public:
 		using ResultType = std::common_type_t<T, U>;
 		Matrix<ResultType> result(this->rows, this->cols);
 
-		auto exec_policy = rows * cols < POLICY_THRESHOLD ? std::execution::seq : std::execution::par_unseq;
-		std::transform(exec_policy,
-			this->rix.begin(), this->rix.end(),
-			other.rix.begin(), result.rix.begin(),
-			func
-		);
+		dispatch_policy(rows * cols, [this, &other, &result, func](auto exec_policy) {
+			std::transform(exec_policy,
+				this->rix.begin(), this->rix.end(),
+				other.rix.begin(), result.rix.begin(),
+				func
+			);
+		});
 		return result;
 	}
 
-	template <typename U>
-	void _element_wise_inplace(const Matrix<U>& other, auto func) {
+	template <typename U, typename Func>
+	void _element_wise_inplace(const Matrix<U>& other, Func func) {
 		validate_dim_compatibility(this->rows, this->cols, other.rows, other.cols);
 
-		auto exec_policy = rows * cols < POLICY_THRESHOLD ? std::execution::seq : std::execution::par_unseq;
-		std::transform(exec_policy,
-			this->rix.begin(), this->rix.end(),
-			other.rix.begin(), this->rix.begin(),
-			func
-		);
+		dispatch_policy(rows * cols, [this, &other, func](auto exec_policy) {
+			std::transform(exec_policy,
+				this->rix.begin(), this->rix.end(),
+				other.rix.begin(), this->rix.begin(),
+				func
+			);
+		});		
 	}
 
 	/// @brief Add another matrix to this matrix.
@@ -312,12 +319,14 @@ public:
 				Matrix<ResultType> result(rows, cols);
 				for (size_t i = 0; i < rows; i++) 
 				{
-					std::transform(
-						exec_policy,
-						rix.begin() + (cols * i), rix.begin() + (cols * (i + 1)),
-						result.rix.begin() + (cols * i),
-						[&other, i](T a) { return a + other[i]; }
-					);
+					dispatch_policy(cols, [this, &other, &result, i](auto exec_policy) {
+						std::transform(
+							exec_policy,
+							rix.begin() + (cols * i), rix.begin() + (cols * (i + 1)),
+							result.rix.begin() + (cols * i),
+							[&other, i](T a) { return a + other[i]; }
+						);
+					});
 				}
 				return result;
 			}
@@ -356,6 +365,57 @@ public:
 		return _element_wise(other, std::multiplies<>());
 	}
 
+	template <typename U>
+	auto naive_mult(const Matrix<U>& other) const {
+		using ResultType = std::common_type_t<T, U>;
+		Matrix<ResultType> result(this->rows, other.cols);
+		for (size_t r = 0; r < this->rows; r++) {
+			for (size_t k = 0; k < this->cols; k++) {
+				ResultType val = (*this)(r, k);
+				for (size_t c = 0; c < other.cols; c++) {
+					result(r, c) += val * other(k, c);
+				}
+			}
+		}
+		return result;
+	}
+
+	template <typename U>
+	auto fast_mult(const Matrix<U>& other) const {
+		using ResultType = std::common_type_t<T, U>;
+		Matrix<ResultType> result(this->rows, other.cols);
+
+		size_t hw_threads = std::thread::hardware_concurrency();
+		if (hw_threads == 0) hw_threads = 1;
+
+		size_t thread_count = std::min(hw_threads, this->rows);
+		size_t rows_per_thread = (this->rows + thread_count - 1) / thread_count;
+
+		{
+			std::vector<std::jthread> workers;
+			workers.reserve(thread_count);
+
+			for (size_t t = 0; t < thread_count; t++) {
+				size_t start_row = t * rows_per_thread;
+				size_t end_row = std::min(start_row + rows_per_thread, this->rows);
+
+				if (start_row < end_row) {
+					workers.emplace_back([this, &other, &result, start_row, end_row]() {
+						for (size_t r = start_row; r < end_row; r++) {
+							for (size_t k = 0; k < this->cols; k++) {
+								ResultType val = (*this)(r, k);
+								for (size_t c = 0; c < other.cols; c++) {
+									result(r, c) += val * other(k, c);
+								}
+							}
+						}
+					});
+				}
+			}
+		}
+		return result;
+	}
+
 	/// @brief Multiply this matrix by another matrix.
 	/// @tparam U The datatype of the other matrix elements.
 	/// @param other The other matrix to multiply with.
@@ -363,52 +423,10 @@ public:
 	template <typename U>
 	Matrix<T> operator*(const Matrix<U>& other) const {
 		validate_dim_compatibility(this->cols, 1, other.rows, 1); // Only r1 and c2 need to match for matrix multiplication
+		if (this->rows * this->cols * other.rows < 4'000'000) 
+			return naive_mult(other);
 
-		if (this->rows * this->cols * other.rows < 4'000'000)
-		{
-			Matrix<T> result(this->rows, other.cols);
-			for (int i = 0; i < this->rows; i++) {
-				for (int j = 0; j < other.cols; j++) {
-					for (int k = 0; k < this->cols; k++) {
-						result(i, j) += (*this)(i, k) * other(k, j);
-					}
-				}
-			}
-			return result;
-		}
-		else
-		{
-			size_t thread_count = std::thread::hardware_concurrency();
-			float row_thread_ratio = this->rows / thread_count;
-			size_t rows_per_thread{};
-
-			if (row_thread_ratio > 4) rows_per_thread = static_cast<size_t>(std::ceil(row_thread_ratio));
-			else rows_per_thread = 4;
-			
-			thread_count = (this->rows + rows_per_thread - 1) / rows_per_thread;
-			Matrix<T> result(this->rows, other.cols);
-			std::vector<std::jthread> workers;
-
-			for (size_t t = 0; t < thread_count; t++) {
-				size_t start_row = t * rows_per_thread;
-				size_t end_row = std::min(start_row + rows_per_thread, this->rows);
-
-				if (start_row < end_row) {
-					workers.emplace_back([&, start_row, end_row]() {
-						for (size_t r = start_row; r < end_row; r++) {
-							for (size_t c = 0; c < other.cols; c++) {
-								T res{};
-								for (size_t k = 0; k < this->cols; k++) {
-									res += (*this)(r, k) * other(k, c);
-								}
-								result(r, c) = res;
-							}
-						}
-						});
-				}
-			}
-			return result;
-		}
+		return fast_mult(other);
 	}
 
 	/// @brief Copy the elements of another matrix into this matrix if their dimensions match.
@@ -423,11 +441,12 @@ public:
 	/// @return A new matrix containing the product.
 	Matrix<float> operator*(const float scalar) const {
 		Matrix<float> result(this->rows, this->cols);
-		auto exec_policy = rows * cols < POLICY_THRESHOLD ? std::execution::seq : std::execution::par_unseq;
-		std::transform(exec_policy,
-			this->rix.begin(), this->rix.end(),
-			result.rix.begin(), [scalar](T val) { return val * scalar; }
-		);
+		dispatch_policy(rows * cols, [this, &result, scalar](auto exec_policy) {
+			std::transform(exec_policy,
+				this->rix.begin(), this->rix.end(),
+				result.rix.begin(), [scalar](T val) { return val * scalar; }
+			);
+		});
 		return result;
 	}
 
@@ -536,12 +555,10 @@ struct LU {
 	Matrix<float> U;
 
 	template <typename T>
-	LU(Matrix<T> og) {
-		validate_dimensions(og.rows, og.cols);
+	LU(Matrix<T> og) : L(Matrix<float>::identity(og.rows)), U(og) {
+
 		if (og.is_square() == 0)
 			throw std::invalid_argument("Matrix must be a square matrix.");
-		L = Matrix<float>::identity(og.rows);
-		U = Matrix<float>(og);
 	}
 };
 
