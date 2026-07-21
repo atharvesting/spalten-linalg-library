@@ -1,7 +1,0 @@
-{
-    "C_Cpp.codeAnalysis.clangTidy.checks.disabled": [
-        "readability-braces-around-statements",
-        "readability-identifier-length",
-        "readability-magic-numbers"
-    ]
-}
