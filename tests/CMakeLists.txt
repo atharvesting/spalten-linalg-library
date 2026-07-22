@@ -11,9 +11,10 @@ set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
 add_executable(Spalten_Test
-    test.cpp
     pch.cpp
     pch.h
+    test_vector.cpp
+    test_matrix.cpp
 )
 
 target_link_libraries(Spalten_Test PRIVATE

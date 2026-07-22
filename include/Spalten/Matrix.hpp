@@ -17,7 +17,7 @@
 size_t constexpr POLICY_THRESHOLD = 10'000;
 
 template <typename Func>
-inline void dispatch_policy(size_t size, Func&& func) {
+inline void dispatch_policy(size_t size, Func&& func) {  // rvalue reference used to accomodate lambdas
 	if (size < POLICY_THRESHOLD) {
 		std::forward<Func>(func)(std::execution::seq);
 	} else {
@@ -222,9 +222,11 @@ public:
 	bool operator==(const Matrix<T>& other) const {
 		if (!dims_equal(other))
 			return false;
-		dispatch_policy(rows * cols, [this, &other](auto exec_policy) {
-			return std::equal(exec_policy, this->rix.begin(), this->rix.end(), other.rix.begin());
+		bool equal = false;
+		dispatch_policy(rows * cols, [this, &other, &equal](auto exec_policy) {
+			equal = std::equal(exec_policy, this->rix.begin(), this->rix.end(), other.rix.begin());
 		});
+		return equal;
 	}
 
 	/// @brief Check if the matrix is square.
@@ -346,7 +348,7 @@ public:
 			for (size_t k = 0; k < this->cols; k++) {
 				ResultType val = (*this)(r, k);
 				for (size_t c = 0; c < other.cols; c++) {
-					result(r, c) += val * other(k, c);
+					result(r, c) += val * static_cast<ResultType>(other(k, c));
 				}
 			}
 		}
@@ -378,7 +380,7 @@ public:
 							for (size_t k = 0; k < this->cols; k++) {
 								ResultType val = (*this)(r, k);
 								for (size_t c = 0; c < other.cols; c++) {
-									result(r, c) += val * other(k, c);
+									result(r, c) += val * static_cast<ResultType>(other(k, c));
 								}
 							}
 						}
@@ -394,7 +396,7 @@ public:
 	/// @param other The other matrix to multiply with.
 	/// @return A new matrix containing the product.
 	template <typename U>
-	Matrix<T> operator*(const Matrix<U>& other) const {
+	auto operator*(const Matrix<U>& other) const {
 		validate_dim_compatibility(this->cols, 1, other.rows, 1); // Only r1 and c2 need to match for matrix multiplication
 		if (this->rows * this->cols * other.rows < 4'000'000) 
 			return naive_mult(other);
@@ -453,7 +455,7 @@ inline Matrix<float> mat_random_uniform(int r, int c) {
 	validate_dimensions(r, c);
 	Matrix<float> mat(r, c);
 	for (auto& num : mat.rix) {
-		num = static_cast<float>(generate_random(0, 0, true));
+		num = generate_random(0, 0, true);
 	}
 	return mat;
 }
@@ -464,7 +466,7 @@ inline Matrix<float> mat_random_uniform(int r, int c) {
 /// @param mean The mean of the normal distribution.
 /// @param variance The variance of the normal distribution.
 /// @return A matrix filled with random float values from the normal distribution.
-inline Matrix<float> mat_random_normal(size_t r, size_t c, float mean = 0, float variance = 1) {
+inline Matrix<float> mat_random_normal(int r, int c, float mean = 0, float variance = 1) {
 	validate_dimensions(r, c);
 	Matrix<float> mat(r, c);
 	for (auto& num : mat.rix) {
@@ -480,7 +482,7 @@ inline Matrix<float> mat_random_normal(size_t r, size_t c, float mean = 0, float
 /// @param start The lower bound of the random value range.
 /// @param stop The upper bound of the random value range.
 /// @return A matrix filled with random integer values.
-inline Matrix<int> mat_random_int_range(size_t r, size_t c, int start, int stop) {
+inline Matrix<int> mat_random_int_range(int r, int c, int start, int stop) {
 	validate_dimensions(r, c);
 	if (start > stop)
 		throw std::invalid_argument("Start must be greater than Stop");
@@ -681,10 +683,10 @@ Matrix<T> submatrix(const Matrix<T>& mat, std::set<int> exclude_rows, std::set<i
 	result.rix.clear();
 
 	for (int i = 0; i < mat.rows; i++) {
-		if (exclude_rows.find(i) != exclude_rows.end()) continue;
+		if (exclude_rows.contains(i)) continue;
 
 		for (int j = 0; j < mat.cols; j++) {
-			if (exclude_cols.find(j) != exclude_cols.end()) continue;
+			if (exclude_cols.contains(j)) continue;
 
 			result.rix.push_back(mat(i, j));
 		}
