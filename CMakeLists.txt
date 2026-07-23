@@ -17,3 +17,7 @@ if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
 endif()
 
 set_target_properties(Spalten PROPERTIES LINKER_LANGUAGE CXX)
+
+# Temporary debug print inside your subdirectory:
+message(STATUS "Current CXX Flags: ${CMAKE_CXX_FLAGS}")
+message(STATUS "Debug CXX Flags: ${CMAKE_CXX_FLAGS_DEBUG}")

@@ -208,6 +208,11 @@ public:
 		return rix[idx];
 	}
 
+	// void operator=(const Matrix<T>& other) {
+	// 	validate_dim_compatibility(rows, cols, other.rows, other.cols);
+	// 	this->rix = other.rix;
+	// }
+
 	/// @brief Check if the dimensions of this matrix are equal to those of another matrix.
 	/// @param other The other matrix to compare with.
 	/// @return True if the dimensions are equal, false otherwise.
